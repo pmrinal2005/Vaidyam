@@ -1,28 +1,35 @@
 import { Hono } from 'hono'
+import api from './api/index'
+import type { Bindings } from './lib/types'
 
 /**
- * SynapseX — edge entry point.
+ * Catena / SynapseX — edge entry point.
  *
- * The site itself is 100% static (public/index.html + /static/*), so it can be
- * hosted anywhere (Vercel free tier, Cloudflare Pages, any CDN) with no server
- * runtime. This worker only exists for the Cloudflare Pages preview and adds a
- * tiny health endpoint; static assets are served by the platform and take
- * precedence over this handler.
+ * The marketing site stays 100% static (public/index.html + /static/*). This
+ * worker mounts the Catena edge API under /api/* and keeps a static-asset
+ * fallback so the landing page and dashboard shell are always reachable.
+ * Static assets are served by the platform and take precedence over these
+ * handlers.
  */
-const app = new Hono()
+const app = new Hono<{ Bindings: Bindings }>()
+
+app.route('/api', api)
 
 app.get('/api/health', (c) =>
   c.json({
     ok: true,
-    app: 'synapsex',
+    app: 'catena',
     runtime: 'cloudflare-pages',
     time: new Date().toISOString()
   })
 )
 
-// Anything not matched by a static asset falls back to the landing page.
+// Static assets normally answer first; these only run if an asset is missing.
 app.all('*', async (c) => {
   const url = new URL(c.req.url)
+  if (url.pathname.startsWith('/dashboard')) {
+    return c.redirect('/dashboard.html', 302)
+  }
   if (url.pathname !== '/') {
     return c.redirect('/', 302)
   }
