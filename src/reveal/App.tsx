@@ -194,14 +194,24 @@ export default function App() {
                 JOIN AN EXCLUSIVE COMMUNITY OF SAILORS. WHETHER YOU CRAVE THE THRILL OF THE OPEN
               </motion.p>
               <motion.div className="flex gap-0 pointer-events-auto items-center" style={{ y: yElement, filter: filterText, opacity: textOpacity }}>
-                <button className="bg-black hover:bg-black/90 transition-colors text-white rounded-[40px] px-8 py-3.5 font-serif tracking-[0.1em] uppercase text-[12px] md:text-[14px] z-10">
+                {/* Both CTAs enter the Catena dashboard. */}
+                <a
+                  href="/dashboard"
+                  data-enter-dashboard
+                  className="bg-black hover:bg-black/90 transition-colors text-white rounded-[40px] px-8 py-3.5 font-serif tracking-[0.1em] uppercase text-[12px] md:text-[14px] z-10 inline-block no-underline"
+                >
                   BUY COLLECTION
-                </button>
-                <button aria-label="Explore collection" className="bg-black hover:bg-black/90 transition-colors w-[46px] h-[46px] flex items-center justify-center rounded-[50%] text-white -ml-2 z-0">
+                </a>
+                <a
+                  href="/dashboard"
+                  data-enter-dashboard
+                  aria-label="Open the Catena causal health dashboard"
+                  className="bg-black hover:bg-black/90 transition-colors w-[46px] h-[46px] flex items-center justify-center rounded-[50%] text-white -ml-2 z-0 no-underline"
+                >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="ml-1">
                     <path d="M5 12h14M12 5l7 7-7 7"/>
                   </svg>
-                </button>
+                </a>
               </motion.div>
             </div>
         </div>

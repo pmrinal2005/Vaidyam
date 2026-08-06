@@ -255,6 +255,35 @@
     if (evt.key === "Escape") { closeDesktopMenu(); closeMobileMenu(); }
   });
 
+  /* ── Dashboard entry (nav DOWNLOAD + reveal BUY COLLECTION) ──
+     Delegated so it also catches the React reveal island's CTAs, which mount
+     after this script runs. Fades to black, then hands off to /dashboard. */
+  var dashLeaving = false;
+  function enterDashboard(href) {
+    if (dashLeaving) return;
+    dashLeaving = true;
+    var target = href || "/dashboard";
+    if (reduceMotion) { window.location.href = target; return; }
+
+    var veil = document.createElement("div");
+    veil.id = "dash-veil";
+    veil.setAttribute("aria-hidden", "true");
+    veil.innerHTML = '<span class="dash-veil-label">Initialising causal twin</span>';
+    document.body.appendChild(veil);
+    requestAnimationFrame(function () { veil.classList.add("is-on"); });
+    setTimeout(function () { window.location.href = target; }, 520);
+  }
+
+  document.addEventListener("click", function (evt) {
+    var el = evt.target && evt.target.closest ? evt.target.closest("[data-enter-dashboard]") : null;
+    if (!el) return;
+    if (evt.metaKey || evt.ctrlKey || evt.shiftKey || evt.button !== 0) return; // allow new-tab
+    evt.preventDefault();
+    closeDesktopMenu();
+    closeMobileMenu();
+    enterDashboard(el.getAttribute("href") || "/dashboard");
+  });
+
   /* ── Scramble-in / scramble-out engine ── */
   var scrambleStates = [];
   Array.prototype.forEach.call(document.querySelectorAll("[data-scramble-in]"), function (el) {

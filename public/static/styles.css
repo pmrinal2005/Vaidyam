@@ -588,3 +588,29 @@ html.reveal-active #bottom-blur { opacity: 0; }
 @media (max-width: 639px) {
   #reveal-section { margin-top: 0; }
 }
+
+/* ── Dashboard hand-off veil ── */
+#dash-veil {
+  position: fixed; inset: 0; z-index: 2147483647;
+  display: flex; align-items: center; justify-content: center;
+  background: #07080a;
+  opacity: 0;
+  transition: opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+#dash-veil.is-on { opacity: 1; }
+.dash-veil-label {
+  font-family: "Space Mono", ui-monospace, monospace;
+  font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase;
+  color: rgba(124, 245, 196, 0.82);
+  padding: 0 24px; text-align: center;
+  animation: dash-veil-pulse 1.15s ease-in-out infinite;
+}
+@keyframes dash-veil-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #dash-veil { transition: none; }
+  .dash-veil-label { animation: none; opacity: 1; }
+}

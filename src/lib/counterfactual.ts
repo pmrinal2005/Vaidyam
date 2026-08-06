@@ -133,10 +133,16 @@ export function simulate(
   const baseHr = mean(w, 'restingHr')
   const projHr = clamp(baseHr - sleepEff * 1.45 - dSteps * 0.00028 - dHydr * 0.0009 + dPm * 0.032, 42, 98)
 
-  // 5-year hypertension trajectory: horizon amplifies sustained BP shifts.
+  // 5-year hypertension trajectory. The horizon amplifies the sustained *change*
+  // only — with no intervention the projection must equal the baseline exactly,
+  // otherwise do(∅) would not be the identity.
   const horizonFactor = clamp(horizonMonths / 60, 0.15, 1.6)
-  const baseRisk = clamp((baseSys - 108) * 1.55 + (7.2 - mean(w, 'sleepHours')) * 4.1, 2, 96)
-  const projRisk = clamp((projSys - 108) * 1.55 * (1 + 0.22 * horizonFactor) + (7.2 - (mean(w, 'sleepHours') + sleepEff)) * 4.1, 2, 96)
+  const riskOf = (sys: number, sleep: number) => (sys - 108) * 1.55 + (7.2 - sleep) * 4.1
+  const baseSleep = mean(w, 'sleepHours')
+  const rawBaseRisk = riskOf(baseSys, baseSleep)
+  const rawProjRisk = riskOf(projSys, baseSleep + sleepEff)
+  const baseRisk = clamp(rawBaseRisk, 2, 96)
+  const projRisk = clamp(rawBaseRisk + (rawProjRisk - rawBaseRisk) * (1 + 0.22 * horizonFactor), 2, 96)
 
   const mk = (
     key: string,
