@@ -660,6 +660,76 @@ input[type="range"]::-moz-range-thumb {
 /* ── Mobile tab bar ── */
 .dash-tabbar { display: none; }
 
+/* ── Rail group separator ── */
+.rail-sep {
+  display: block;
+  width: 20px; height: 1px;
+  margin: 5px auto;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.14), transparent);
+}
+
+/* ── Segmented control ── */
+.seg {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 11px;
+  border: 1px solid var(--stroke-2);
+  background: rgba(255,255,255,.03);
+}
+.seg-btn {
+  padding: 5px 11px;
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  transition: background .18s ease, color .18s ease;
+}
+.seg-btn:hover { color: var(--ink); }
+.seg-btn.is-on { background: rgba(124,245,196,.14); color: var(--accent); }
+
+/* ── Text input (food log / free-text query) ── */
+.food-input {
+  flex: 1 1 260px;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--stroke-2);
+  background: rgba(0,0,0,.28);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 12.5px;
+}
+.food-input:focus-visible { outline: none; border-color: rgba(124,245,196,.5); box-shadow: 0 0 0 3px rgba(124,245,196,.12); }
+.food-input::placeholder { color: var(--ink-4); }
+
+/* ── zk proof output ── */
+.proof-out {
+  margin-top: 11px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--stroke-2);
+  background: rgba(0,0,0,.32);
+}
+.proof-json {
+  margin: 7px 0 0;
+  padding: 9px;
+  border-radius: 8px;
+  background: rgba(0,0,0,.4);
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--accent-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ── Clinician brief list ── */
+.brief-list { margin: 0; padding-left: 20px; display: grid; gap: 9px; }
+.brief-list li { font-size: 12.5px; line-height: 1.6; color: var(--ink-2); overflow-wrap: anywhere; }
+.brief-list li::marker { color: var(--accent); font-family: var(--mono); font-size: 11px; }
+
 /* ── Misc utility ── */
 .mono { font-family: var(--mono); }
 .muted { color: var(--ink-3); }
@@ -779,6 +849,54 @@ input[type="range"]::-moz-range-thumb {
   .kpi { padding: 11px; }
   .view-title { font-size: 17px; }
   .tbl { font-size: 11px; }
+  .stat-strip { grid-template-columns: 1fr 1fr; }
+  .view-actions { width: 100%; }
+  .view-actions .btn { flex: 1 1 auto; justify-content: center; }
+  .seg { width: 100%; }
+  .seg-btn { flex: 1; text-align: center; }
+  .graph-stage { min-height: 300px; }
+  .scroll-y { max-height: 268px; }
+  .proof-json { font-size: 9px; }
+  .brief-list li { font-size: 12px; }
+}
+
+@media (max-width: 360px) {
+  .kpi-grid, .stat-strip { grid-template-columns: 1fr; }
+  .topbar-title { min-width: 0; }
+  .topbar-heading { font-size: 14px; }
+}
+
+/* Tables become horizontally scrollable rather than crushing content. */
+@media (max-width: 860px) {
+  .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tbl { min-width: 560px; }
+}
+
+/* Touch devices: rail tooltips never hover-trap, targets stay ≥40px. */
+@media (hover: none) {
+  .rail-item .rail-tip { display: none; }
+  .rail-item, .rail-btn, .topbar-icon-btn { min-height: 40px; min-width: 40px; }
+  .gnode:hover circle { stroke-width: 1.5; }
+}
+
+/* Clinician brief prints as a clean document. */
+@media print {
+  .dash-rail, .dash-tabbar, .dash-topbar, .prov-strip, .dash-scrim,
+  .dash-toast, .view-actions, .dash-skip { display: none !important; }
+  .dash-body, .dash-shell, .dash-frame, .dash-main, .card {
+    background: #fff !important; color: #111 !important; box-shadow: none !important;
+  }
+  .dash-main { padding: 0 !important; overflow: visible !important; }
+  .bento { display: block !important; }
+  .card {
+    border: 1px solid #ccc !important; break-inside: avoid; page-break-inside: avoid;
+    margin-bottom: 10px;
+  }
+  .card-title, .view-title, .row-title, .stat-v, .tbl td, .tbl th, .brief-list li { color: #111 !important; }
+  .card-note, .row-sub, .view-sub, .stat-k, .tiny, .muted { color: #555 !important; }
+  .badge { border-color: #bbb !important; color: #333 !important; background: #f2f2f2 !important; }
+  .tbl { min-width: 0 !important; }
+  .scroll-y { max-height: none !important; overflow: visible !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {
