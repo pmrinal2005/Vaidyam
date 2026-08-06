@@ -32,6 +32,8 @@
   var statsSection   = document.getElementById("stats-section");
   var wrapper        = document.getElementById("swiper-wrapper");
   var footerYear     = document.getElementById("footer-year");
+  var revealSection  = document.getElementById("reveal-section");
+  var videoLayer     = document.getElementById("video-layer");
 
   var reduceMotion = window.matchMedia
     ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -140,17 +142,54 @@
     document.head.appendChild(lenisScript);
   }
 
-  /* ── Scroll tracking ── */
+  /* ── Scroll tracking ──
+     The reveal section (added below the metrics carousel) contributes its own
+     600vh of scroll. Excluding that height here keeps every original
+     animation — video scrub, hero fade, cinematic parallax — on exactly the
+     same scroll timeline it had before the section existed. */
+  function originalScrollRange() {
+    var doc = document.documentElement;
+    var full = doc.scrollHeight - doc.clientHeight;
+    if (!revealSection) return full;
+    // Everything above the reveal section is the "original" scrollable region.
+    var revealHeight = revealSection.offsetHeight || 0;
+    var range = full - revealHeight;
+    return range > 1 ? range : full;
+  }
+
   function updateScrollProgress() {
     var doc = document.documentElement;
     var scrollTop = window.scrollY || doc.scrollTop || 0;
-    var scrollHeight = doc.scrollHeight - doc.clientHeight;
-    scrollProgress = scrollHeight > 0 ? clamp01(scrollTop / scrollHeight) : 0;
+    var range = originalScrollRange();
+    scrollProgress = range > 0 ? clamp01(scrollTop / range) : 0;
+  }
+
+  /* ── Reveal section: host-chrome adaptation ──
+     The reveal opens a full-bleed white plate, so the fixed white header
+     would become invisible. Flip it to an on-light palette while the reveal
+     plate is covering the viewport, and park the dark background video +
+     bottom blur so they cannot bleed through. */
+  var revealActive = false;
+  function updateRevealChrome() {
+    if (!revealSection) return;
+    var rect = revealSection.getBoundingClientRect();
+    // Sticky child is pinned once the section's top passes the viewport top.
+    var height = rect.height || 1;
+    var travelled = clamp01(-rect.top / height);
+    // clipPath ellipse reaches full size at ~8% of the section's progress.
+    var onLight = rect.top <= 0 && rect.bottom > window.innerHeight * 0.5 && travelled > 0.045;
+
+    if (onLight !== revealActive) {
+      revealActive = onLight;
+      if (header) header.classList.toggle("on-light", onLight);
+      document.documentElement.classList.toggle("reveal-active", onLight);
+    }
   }
 
   function onScroll() {
     updateScrollProgress();
     checkStatsReveal();
+    updateRevealChrome();
   }
 
   window.addEventListener("scroll", onScroll, { passive: true });
@@ -415,8 +454,7 @@
     }
 
     if (!reduceMotion) {
-      var doc = document.documentElement;
-      var scrollH = doc.scrollHeight - doc.clientHeight;
+      var scrollH = originalScrollRange();
       var scrollYNorm = scrollH > 0 ? clamp01(window.scrollY / scrollH) : 0;
 
       /* Hero fade + subtle scale */
@@ -467,4 +505,16 @@
 
   requestAnimationFrame(tick);
   checkStatsReveal();
+  updateRevealChrome();
+
+  /* The reveal island mounts asynchronously (React) and changes the document
+     height from 100vh to 600vh; re-measure once it lands so the original
+     timeline normalisation stays correct. */
+  if (revealSection && typeof ResizeObserver === "function") {
+    var revealObserver = new ResizeObserver(function () {
+      updateScrollProgress();
+      updateRevealChrome();
+    });
+    revealObserver.observe(revealSection);
+  }
 })();

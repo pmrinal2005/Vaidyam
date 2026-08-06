@@ -350,6 +350,100 @@ button:focus { outline: none; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
+/* ==========================================================================
+   Reveal section (opening motion-graphic transition)
+   The React island is mounted into #reveal-root; this only reserves layout
+   and adapts the pre-existing fixed chrome to the reveal's white plate.
+   ========================================================================== */
+#reveal-section {
+  position: relative;
+  z-index: 40;
+  width: 100vw;
+  margin-left: calc(-50vw + 50%);
+  background: #000;
+  scroll-margin-top: 0;
+}
+
+/* While the reveal's white plate covers the viewport, the dark background
+   video and bottom blur must not bleed through, and the header flips to an
+   on-light palette so it stays legible. */
+html.reveal-active #video-layer { opacity: 0; }
+html.reveal-active #bottom-blur { opacity: 0; }
+#video-layer, #bottom-blur { transition: opacity 0.35s ease-out; }
+
+#main-header.on-light .logo-pill,
+#main-header.on-light .menu-pill,
+#main-header.on-light .logo-pill-m,
+#main-header.on-light .menu-pill-m {
+  background: rgba(0, 0, 0, 0.08);
+}
+#main-header.on-light .logo-pill:hover,
+#main-header.on-light .logo-pill-m:hover {
+  background: rgba(0, 0, 0, 0.14);
+}
+#main-header.on-light .logo-pill svg,
+#main-header.on-light .logo-pill-m svg { color: #000; }
+#main-header.on-light .logo-pill span,
+#main-header.on-light .logo-pill-m span { color: #000; }
+#main-header.on-light .hamburger-icon span,
+#main-header.on-light .hamburger-icon-m span { background: #000; }
+#main-header.on-light .menu-links a,
+#main-header.on-light .menu-links-m a { color: rgba(0, 0, 0, 0.75); }
+#main-header.on-light .menu-links a:hover,
+#main-header.on-light .menu-links-m a:hover { color: #000; }
+#main-header.on-light .menu-pill.open .hamburger-btn,
+#main-header.on-light .menu-pill-m.open .hamburger-btn-m { background: rgba(0, 0, 0, 0.08); }
+#main-header.on-light .download-btn,
+#main-header.on-light .download-btn-m {
+  background: #000;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+#main-header.on-light .download-btn:hover,
+#main-header.on-light .download-btn-m:hover { background: #1a1a1a; }
+#main-header.on-light .download-btn i,
+#main-header.on-light .download-btn span,
+#main-header.on-light .download-btn-m i,
+#main-header.on-light .download-btn-m span { color: #fff; }
+
+/* Colour cross-fade for the palette flip.
+   NOTE: each selector re-states the element's original transition so the
+   width/transform animations defined earlier are preserved, not replaced. */
+#main-header .logo-pill {
+  transition: background 0.3s ease-out, color 0.3s ease-out, transform 0.15s;
+}
+#main-header .menu-pill {
+  transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1), background 0.3s ease-out;
+}
+#main-header .logo-pill-m {
+  transition: width 0.35s cubic-bezier(0.22,1,0.36,1), opacity 0.35s,
+              margin-right 0.35s, padding 0.35s, background 0.3s ease-out, color 0.3s ease-out;
+}
+#main-header .menu-pill-m {
+  transition: width 0.35s cubic-bezier(0.22,1,0.36,1), background 0.3s ease-out;
+}
+#main-header .download-btn,
+#main-header .download-btn-m {
+  transition: background 0.3s ease-out, transform 0.15s, box-shadow 0.3s ease-out;
+}
+#main-header .logo-pill svg,
+#main-header .logo-pill-m svg,
+#main-header .logo-pill span,
+#main-header .logo-pill-m span,
+#main-header .download-btn i,
+#main-header .download-btn span,
+#main-header .download-btn-m i,
+#main-header .download-btn-m span {
+  transition: color 0.3s ease-out;
+}
+#main-header .hamburger-icon span,
+#main-header .hamburger-icon-m span {
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s, background 0.3s ease-out;
+}
+#main-header .menu-links a,
+#main-header .menu-links-m a {
+  transition: color 0.3s ease-out;
+}
+
 /* ── Footer ── */
 #main-footer {
   position: relative; z-index: 10;
@@ -471,4 +565,10 @@ button:focus { outline: none; }
   #cinematic-inner { opacity: 1 !important; transform: none !important; }
   #hero-section, .hero-desc { opacity: 1 !important; transform: none !important; }
   * { scroll-behavior: auto !important; }
+  #video-layer, #bottom-blur { transition: none !important; }
+}
+
+/* ── Reveal section responsive spacing ── */
+@media (max-width: 639px) {
+  #reveal-section { margin-top: 0; }
 }

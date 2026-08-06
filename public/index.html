@@ -16,6 +16,9 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
 <link rel="stylesheet" href="/static/styles.css" />
+<link rel="stylesheet" href="/static/reveal/reveal.css" />
+<link rel="preconnect" href="https://aspect-slam-99684872.figma.site" crossorigin />
+<link rel="preconnect" href="https://stream.mux.com" crossorigin />
 </head>
 <body>
 
@@ -146,6 +149,12 @@
   </section>
 </main>
 
+<!-- SECTION 4: Opening motion-graphic reveal (React + motion/react island) -->
+<section id="reveal-section" aria-labelledby="reveal-heading">
+  <h2 id="reveal-heading" class="visually-hidden">Master the Elements — 2K26 collection reveal</h2>
+  <div id="reveal-root"></div>
+</section>
+
 <footer id="main-footer">
   <p>SynapseX — Neural Intelligence Layer</p>
   <p><span id="footer-year"></span> · All signals reserved</p>
@@ -153,5 +162,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
 <script src="/static/app.js" defer></script>
+<script src="/static/reveal/reveal.js" type="module"></script>
 </body>
 </html>
