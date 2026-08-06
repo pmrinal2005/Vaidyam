@@ -1,0 +1,25 @@
+{
+  /* --------------------------------------------------------------------------
+     Scoped JSX override for the React "opening reveal" island.
+
+     The repository root tsconfig.json sets `jsxImportSource: "hono/jsx"` for
+     the Cloudflare worker entry (src/index.tsx). esbuild/Vite resolve the
+     *nearest* tsconfig for each file, so without this override the island's
+     .tsx files were compiled against Hono's JSX runtime — which produced
+     `TypeError: Cannot convert a Symbol value to a string` at mount time
+     (Hono's JSXNode receiving React's Symbol-based element type).
+
+     This file re-points JSX to React for `src/reveal/**` only; the root
+     tsconfig — and therefore the Hono/Cloudflare build — is untouched.
+     -------------------------------------------------------------------------- */
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+    "allowJs": false,
+    "noEmit": true
+  },
+  "include": ["./**/*.ts", "./**/*.tsx"]
+}

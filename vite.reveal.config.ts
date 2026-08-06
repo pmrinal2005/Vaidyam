@@ -13,10 +13,19 @@ import tailwindcss from '@tailwindcss/vite'
  *
  * Kept separate from vite.config.ts so the Hono/Cloudflare worker build is
  * completely untouched.
+ *
+ * JSX NOTE: the root tsconfig.json pins `jsxImportSource: "hono/jsx"` for the
+ * worker entry. `esbuild.jsxImportSource` below forces React's runtime for
+ * this build regardless of which tsconfig esbuild happens to resolve, so the
+ * island can never be compiled against Hono's JSX factory again.
  */
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   publicDir: false,
+  esbuild: {
+    jsx: 'automatic',
+    jsxImportSource: 'react'
+  },
   build: {
     outDir: '.reveal-build',
     emptyOutDir: true,

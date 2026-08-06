@@ -10,11 +10,27 @@ html, body {
   color: #fff;
   width: 100%;
   height: auto;
-  overflow-x: hidden;
-  overflow-y: auto;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* ── Scrollport ownership (do not move these onto <body>) ──
+   The horizontal-clip / vertical-scroll pair lives on the ROOT element so the
+   values propagate to the viewport per CSS Overflow §3.3, leaving <body> as a
+   normal `overflow: visible` box.
+
+   Why it matters: an `overflow` value other than `visible` on <body> turns
+   <body> into the nearest scrollport for all of its descendants. Because
+   <body> is `height: auto` it never actually scrolls, so every
+   `position: sticky` element inside it silently stops pinning — which broke
+   the reveal section's sticky viewport plate (it scrolled away instead of
+   staying pinned through its 600vh track). Keeping <body> visible preserves
+   the original no-horizontal-scroll behaviour AND working sticky. */
+html {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+body { overflow: visible; }
 
 html.lenis, html.lenis-under-construction { height: auto; }
 .lenis.lenis-smooth { scroll-behavior: auto !important; }
