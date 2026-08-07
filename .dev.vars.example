@@ -1,0 +1,93 @@
+# ════════════════════════════════════════════════════════════════════════════
+# CATENA — local development secrets  (Cloudflare Workers / Pages)
+# ════════════════════════════════════════════════════════════════════════════
+#
+#   cp .dev.vars.example .dev.vars
+#
+# `.dev.vars` is read automatically by `wrangler pages dev` and injected as
+# `c.env` inside the Hono app (src/api/index.ts). It is gitignored — never
+# commit real keys.
+#
+# EVERY VALUE HERE IS OPTIONAL. The dashboard is fully functional with this file
+# absent: each key upgrades one panel from a deterministic, explicitly-labelled
+# fallback to a live upstream. `env` is normalised to `{}` everywhere
+# (src/lib/supabase.ts, src/lib/inference.ts), so a missing key degrades — it
+# never throws.
+#
+# What is live WITHOUT any key at all (no registration, CORS-open, verified):
+#   Open-Meteo weather ........... api.open-meteo.com
+#   Open-Meteo air quality ....... air-quality-api.open-meteo.com
+#   openFDA adverse events ....... api.fda.gov
+#   Europe PMC literature ........ www.ebi.ac.uk        (PubMed mirror)
+#   Population health ............ disease.sh
+#
+# For PRODUCTION on Cloudflare Pages, do NOT ship this file. Use:
+#   npx wrangler pages secret put GROQ_API_KEY --project-name <project>
+# (repeat per key). On Vercel/Netlify these belong in the dashboard's env UI —
+# but note the static Vercel target has no server, so keys there are unused;
+# see README → "Which deploy target reads these".
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# 1. USDA_API_KEY  — Nutrition panel
+# ───────────────────────────────────────────────────────────────────────────────
+# Affects  : /api/nutrition  (dashboard → Nutrition view)
+# Get it   : https://fdc.nal.usda.gov/api-key-signup   (free, instant, no card)
+# Without  : the panel uses a deterministic per-food estimator and is labelled
+#            non-live in the provenance strip, with the real reason
+#            "no USDA_API_KEY".
+# IMPORTANT: do NOT put the literal `DEMO_KEY` here. The shared demo key is
+#            globally rate-limited and answers HTTP 429 for this endpoint
+#            (verified), so src/lib/sources.ts treats DEMO_KEY as "no key" and
+#            skips the request rather than burning a call that cannot succeed.
+USDA_API_KEY=
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# 2. LLM providers — Agent Swarm + Draft/Verify Cascade
+# ───────────────────────────────────────────────────────────────────────────────
+# Affects  : /api/swarm, /api/cascade, /api/health, /api/saas
+#            (dashboard → Swarm, Cascade views)
+# Without  : the swarm runs the DETERMINISTIC graph reasoner over the personal
+#            causal graph. Every panel still renders real numbers derived from
+#            the twin; the provenance strip reports "deterministic graph
+#            reasoner (no provider key)" and the live chip reads degraded.
+# ANY ONE of the four is enough. Resolution order is the order in
+# src/lib/inference.ts → providers(): groq → nim → openrouter → proxy.
+
+# GroqCloud LPU — drafts (fastest; generous free tier)
+#   https://console.groq.com/keys
+GROQ_API_KEY=
+
+# NVIDIA NIM — verifier for divergent spans
+#   https://build.nvidia.com/  → "Get API Key"
+NVIDIA_NIM_API_KEY=
+
+# OpenRouter — Agent-Forest voting pool (has :free models)
+#   https://openrouter.ai/keys
+OPENROUTER_API_KEY=
+
+# OpenAI-compatible proxy (generic escape hatch; any OpenAI-shaped endpoint).
+# OPENAI_BASE_URL defaults to https://www.genspark.ai/api/llm_proxy/v1 when
+# unset. Set BOTH to use e.g. api.openai.com or a self-hosted vLLM.
+OPENAI_API_KEY=
+OPENAI_BASE_URL=
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# 3. Supabase — twin persistence (Postgres + pgvector)
+# ───────────────────────────────────────────────────────────────────────────────
+# Affects  : /api/overview (observation recency), /api/memory (storage budget),
+#            /api/health  (supabase: true|false)
+# Get it   : https://supabase.com  → new project → Settings → API
+# Schema   : psql "$DB_URL" -f supabase/schema.sql
+# Without  : the twin is COMPUTED per request from the live environment plus a
+#            stable per-user seed — deterministic and reproducible, so the
+#            dashboard is fully functional before any database exists.
+#            supabaseConfigured() requires SUPABASE_URL *and* one of the keys;
+#            with either missing every call resolves to null (no throw).
+SUPABASE_URL=
+# Prefer the anon key: this app only ever SELECTs. Use the service key solely if
+# you enable server-side upserts (sbUpsert) with RLS that requires it.
+SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_KEY=
