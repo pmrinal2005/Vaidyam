@@ -274,6 +274,22 @@ export async function fetchLiterature(term: string, prov: Provenance[], retmax =
   // PubMed E-utilities send no CORS header (verified: 302 → blocked in-browser),
   // so in local-engine mode we go straight to Europe PMC, which mirrors PubMed
   // content and does send `access-control-allow-origin: *`.
+  //
+  // The skip is RECORDED, not silent. Omitting the entry made the provenance
+  // strip differ between transports for the same route (edge reported 2 sources
+  // on /literature, the in-browser engine only 1) with nothing on screen to
+  // explain the difference — a user would read the shorter strip as data
+  // quietly going missing. Emitting an explicit non-live entry keeps both
+  // transports' envelopes structurally identical and states the real reason, so
+  // `degraded` and the pill tooltip stay truthful.
+  if (IS_BROWSER) {
+    prov.push({
+      source: 'PubMed E-utilities',
+      live: false,
+      fetchedAt: new Date().toISOString(),
+      detail: 'skipped in-browser (no CORS header) — using Europe PMC mirror'
+    })
+  }
   const search = IS_BROWSER
     ? null
     : await safeJson<any>(

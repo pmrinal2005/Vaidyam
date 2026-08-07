@@ -240,7 +240,30 @@ input, select, textarea { font-family: inherit; color: inherit; }
 .topbar-search input {
   flex: 1 1 auto; min-width: 0;
   background: none; border: none; outline: none;
-  font-size: 13px; color: var(--ink);
+  color: var(--ink);
+  /* Stretch the control to the full 40px of its wrapper. The input previously
+     had no height, so it laid out at its 16px line box: the visible pill was
+     40px but only the middle 16px was actually the input's hit area, and a tap
+     on the upper/lower 12px landed on the wrapper and did not focus the field.
+     `height: 100%` makes the tap target match what the user sees. */
+  height: 100%;
+  align-self: stretch;
+  /* 16px prevents iOS Safari from zooming the viewport on focus — below 16px it
+     auto-magnifies, which shifts the whole dashboard sideways on a phone. */
+  font-size: 16px;
+  /* Safari/iOS give search inputs a rounded UA appearance and an inner cancel
+     button that both break the flat pill; neutralise them. */
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 0;
+}
+.topbar-search input::-webkit-search-decoration,
+.topbar-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
+/* Pointer devices have no zoom-on-focus behaviour, so restore the intended
+   13px there. Keyboard/mouse users see the original density; touch users keep
+   the 16px that prevents the zoom jump. */
+@media (hover: hover) and (pointer: fine) {
+  .topbar-search input { font-size: 13px; }
 }
 .topbar-search input::placeholder { color: var(--ink-4); }
 
