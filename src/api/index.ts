@@ -553,7 +553,10 @@ api.get('/nutrition', async (c) => {
   const started = Date.now()
   const ctx = await twinContext(c)
   const prov = ctx.prov.slice()
-  const key = c.env?.USDA_API_KEY || 'DEMO_KEY'
+  // Pass the key through verbatim (possibly ''). fetchFood() decides: a real
+  // key → live USDA call; absent/DEMO_KEY → deterministic estimate labelled
+  // non-live, because DEMO_KEY is globally rate-limited (verified HTTP 429).
+  const key = c.env?.USDA_API_KEY || ''
   const qParam = c.req.query('q')
   const queries = qParam
     ? qParam.split(',').map((s) => s.trim()).filter(Boolean).slice(0, 6)

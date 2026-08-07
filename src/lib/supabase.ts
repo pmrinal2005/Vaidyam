@@ -8,12 +8,27 @@
  */
 import type { Bindings, Provenance } from './types'
 
-export function supabaseConfigured(env: Bindings) {
-  return Boolean(env.SUPABASE_URL && (env.SUPABASE_SERVICE_KEY || env.SUPABASE_ANON_KEY))
+/**
+ * ENV-SAFETY NOTE
+ * ---------------
+ * `env` is NOT guaranteed to be an object. On Cloudflare Pages `c.env` is
+ * populated, but the same Hono app is also mounted:
+ *   • in the browser by src/local/engine.ts (local fallback engine), and
+ *   • under `wrangler pages dev` before any binding exists,
+ * where `c.env` is `undefined`. The previous code dereferenced `env.SUPABASE_URL`
+ * directly, so `supabaseConfigured(undefined)` threw a TypeError — turning what
+ * should have been a graceful "not configured, use the computed twin" path into
+ * a hard 500 on /overview, /memory and /health. Every accessor below now
+ * normalises `env` to `{}` first.
+ */
+export function supabaseConfigured(env?: Bindings | null) {
+  const e = env || ({} as Bindings)
+  return Boolean(e.SUPABASE_URL && (e.SUPABASE_SERVICE_KEY || e.SUPABASE_ANON_KEY))
 }
 
-function headers(env: Bindings) {
-  const key = env.SUPABASE_SERVICE_KEY || env.SUPABASE_ANON_KEY || ''
+function headers(env?: Bindings | null) {
+  const e = env || ({} as Bindings)
+  const key = e.SUPABASE_SERVICE_KEY || e.SUPABASE_ANON_KEY || ''
   return {
     apikey: key,
     authorization: `Bearer ${key}`,
@@ -23,7 +38,7 @@ function headers(env: Bindings) {
 }
 
 export async function sbSelect<T>(
-  env: Bindings,
+  env: Bindings | undefined | null,
   table: string,
   query: string,
   prov: Provenance[],
@@ -34,7 +49,7 @@ export async function sbSelect<T>(
   try {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), timeoutMs)
-    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${table}?${query}`, {
+    const res = await fetch(`${(env as Bindings).SUPABASE_URL}/rest/v1/${table}?${query}`, {
       headers: headers(env),
       signal: ctrl.signal
     })
@@ -63,7 +78,7 @@ export async function sbSelect<T>(
 }
 
 export async function sbUpsert<T>(
-  env: Bindings,
+  env: Bindings | undefined | null,
   table: string,
   rows: unknown[],
   onConflict: string,
@@ -71,7 +86,7 @@ export async function sbUpsert<T>(
 ): Promise<T[] | null> {
   if (!supabaseConfigured(env) || !rows.length) return null
   try {
-    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/${table}?on_conflict=${onConflict}`, {
+    const res = await fetch(`${(env as Bindings).SUPABASE_URL}/rest/v1/${table}?on_conflict=${onConflict}`, {
       method: 'POST',
       headers: { ...headers(env), prefer: 'return=representation,resolution=merge-duplicates' },
       body: JSON.stringify(rows)
@@ -95,14 +110,14 @@ export async function sbUpsert<T>(
 
 /** Calls a Postgres function (used for the pgvector PPR / retrieval RPCs). */
 export async function sbRpc<T>(
-  env: Bindings,
+  env: Bindings | undefined | null,
   fn: string,
   args: Record<string, unknown>,
   prov: Provenance[]
 ): Promise<T | null> {
   if (!supabaseConfigured(env)) return null
   try {
-    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+    const res = await fetch(`${(env as Bindings).SUPABASE_URL}/rest/v1/rpc/${fn}`, {
       method: 'POST',
       headers: headers(env),
       body: JSON.stringify(args)

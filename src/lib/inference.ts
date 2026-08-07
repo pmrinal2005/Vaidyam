@@ -24,13 +24,23 @@ type ProviderCfg = {
   voteModels: string[]
 }
 
-export function providers(env: Bindings): ProviderCfg[] {
+/**
+ * ENV-SAFETY NOTE
+ * ---------------
+ * `env` may be `undefined` — `c.env` is absent when this same Hono app runs in
+ * the browser via src/local/engine.ts, and under `wrangler pages dev` before
+ * bindings exist. Dereferencing a key off `undefined` threw a
+ * TypeError, which surfaced as a 500 on /health, /cascade, /swarm and /saas
+ * instead of the intended "no key → deterministic reasoner" degradation.
+ */
+export function providers(env?: Bindings | null): ProviderCfg[] {
+  const e = env || ({} as Bindings)
   return [
     {
       id: 'groq',
       label: 'GroqCloud LPU',
       base: 'https://api.groq.com/openai/v1',
-      key: env.GROQ_API_KEY,
+      key: e.GROQ_API_KEY,
       draftModel: 'llama-3.1-8b-instant',
       verifyModel: 'llama-3.3-70b-versatile',
       voteModels: ['llama-3.1-8b-instant', 'gemma2-9b-it']
@@ -39,7 +49,7 @@ export function providers(env: Bindings): ProviderCfg[] {
       id: 'nim',
       label: 'NVIDIA NIM',
       base: 'https://integrate.api.nvidia.com/v1',
-      key: env.NVIDIA_NIM_API_KEY,
+      key: e.NVIDIA_NIM_API_KEY,
       draftModel: 'meta/llama-3.1-8b-instruct',
       verifyModel: 'meta/llama-3.3-70b-instruct',
       voteModels: ['meta/llama-3.1-8b-instruct', 'mistralai/mistral-7b-instruct-v0.3']
@@ -48,7 +58,7 @@ export function providers(env: Bindings): ProviderCfg[] {
       id: 'openrouter',
       label: 'OpenRouter',
       base: 'https://openrouter.ai/api/v1',
-      key: env.OPENROUTER_API_KEY,
+      key: e.OPENROUTER_API_KEY,
       draftModel: 'meta-llama/llama-3.2-3b-instruct:free',
       verifyModel: 'meta-llama/llama-3.3-70b-instruct:free',
       voteModels: ['meta-llama/llama-3.2-3b-instruct:free', 'google/gemma-2-9b-it:free', 'qwen/qwen-2.5-7b-instruct:free']
@@ -56,8 +66,8 @@ export function providers(env: Bindings): ProviderCfg[] {
     {
       id: 'proxy',
       label: 'Platform LLM proxy',
-      base: env.OPENAI_BASE_URL || 'https://www.genspark.ai/api/llm_proxy/v1',
-      key: env.OPENAI_API_KEY,
+      base: e.OPENAI_BASE_URL || 'https://www.genspark.ai/api/llm_proxy/v1',
+      key: e.OPENAI_API_KEY,
       draftModel: 'gpt-5-nano',
       verifyModel: 'gpt-5-mini',
       voteModels: ['gpt-5-nano', 'gpt-5-mini']
@@ -210,7 +220,7 @@ export function localReason(
  * consumes all layer-1 outputs as auxiliary information (MoA definition).
  */
 export async function runSwarm(
-  env: Bindings,
+  env: Bindings | undefined | null,
   opts: {
     query: string
     graph: CausalGraph
@@ -346,7 +356,7 @@ export async function runSwarm(
 
 /** Draft-Verify cascade telemetry (speculative decoding acceptance model). */
 export function buildCascade(
-  env: Bindings,
+  env: Bindings | undefined | null,
   route: ReturnType<typeof routeQuery>,
   observed: { draftMs: number; verifyMs: number; draftTokens: number; agentCount: number },
   seedKey: string

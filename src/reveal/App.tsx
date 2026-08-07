@@ -12,21 +12,27 @@ const orbitImagesData = [
 ];
 
 /**
- * BACKGROUND NOTE (Mux HLS removal)
- * ---------------------------------
+ * BACKGROUND NOTE (Mux HLS removal → SOLID BLACK backdrop)
+ * --------------------------------------------------------
  * The reveal previously streamed an external Mux HLS manifest
- * (stream.mux.com/…m3u8) behind the orbit gallery. That dependency has been
- * removed entirely: no <video>, no <source>, no hls.js loader, no external
- * stream request. It is replaced by `.reveal-backdrop` — a pure-CSS animated
- * motion-graphic backdrop (layered conic/radial gradient drifts + grain)
- * defined in index.css.
+ * (stream.mux.com/…m3u8) behind the orbit gallery. That dependency is removed
+ * completely: no <video>, no <source>, no hls.js loader, no preconnect, no
+ * external stream request of any kind. It is replaced by `.reveal-backdrop` —
+ * a SOLID BLACK (#000) layer defined in index.css that occupies the exact same
+ * box and z-index the <video> occupied.
  *
- * Why CSS instead of another video file:
- *  • zero third-party network dependency (the m3u8 could 403/expire at any
- *    time, which is what made the section fragile in the first place);
- *  • no hls.js bundle (~140 KB) and no autoplay-policy failure modes;
- *  • it is GPU-composited transform/opacity work only, so the scroll-driven
- *    Framer Motion timeline below keeps its frame budget on mobile.
+ * Why solid black rather than another stream or a gradient:
+ *  • zero third-party network dependency — the m3u8 could 403/expire at any
+ *    time, which is precisely what made this section fragile;
+ *  • no hls.js bundle (~140 KB) and no autoplay-policy failure paths;
+ *  • nothing paints or composites behind the orbit, so the scroll-driven
+ *    Framer Motion timeline keeps its whole frame budget on mobile;
+ *  • maximum contrast for the white clip-path panel that irises open over it,
+ *    which IS the opening motion-graphic transition.
+ *
+ * The opening motion graphic itself is untouched: it is the Framer Motion
+ * timeline below (the `clipPath` ellipse iris + the orbit gallery's radius /
+ * spread / item-size / rotation / focus choreography), not the backdrop.
  *
  * CRITICAL: every Framer Motion value, keyframe array, offset and z-index in
  * this component is byte-for-byte the spec's. Only the backdrop layer changed.
@@ -79,13 +85,10 @@ export default function App() {
     <div ref={containerRef} className="relative w-full h-[600vh] bg-black">
       <div className="sticky top-0 w-full h-screen overflow-hidden text-white">
 
-        {/* Motion-graphic backdrop — replaces the removed Mux HLS <video>.
-            Occupies the exact same box and z-index the video did. */}
-        <div className="reveal-backdrop absolute inset-0 w-full h-full z-0" aria-hidden="true">
-          <span className="reveal-backdrop-sheen" />
-          <span className="reveal-backdrop-drift" />
-          <span className="reveal-backdrop-grain" />
-        </div>
+        {/* Solid black backdrop — replaces the removed Mux HLS <video>.
+            Occupies the exact same box and z-index the video did. No child
+            layers, no animation, no network request. */}
+        <div className="reveal-backdrop absolute inset-0 w-full h-full z-0" aria-hidden="true" />
 
         <div className="absolute inset-0 bg-black/10 z-0"></div>
 

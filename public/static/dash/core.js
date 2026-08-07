@@ -49,6 +49,111 @@
     });
   };
 
+  /* ══════════════════════════════════════════════════════════════════════
+     API BASE RESOLUTION  —  root cause of "HTTP 404 on /overview"
+     ----------------------------------------------------------------------
+     The old client hard-coded a same-origin relative path:
+
+         var url = "/api" + path + "?" + qs(params);
+
+     `/api/*` is answered by the Hono worker in src/api/index.ts, which only
+     exists in the Cloudflare Pages build (dist/_worker.js). But the project's
+     configured target is Vercel STATIC (vercel.json → outputDirectory
+     "dist-static"), an artifact with no serverless function at all. So
+     `/api/overview` missed every file on the static host and returned 404,
+     which C.api() surfaced verbatim as "HTTP 404 on /overview". Because
+     C.load()'s .catch replaces the entire view with C.errBox, the failure was
+     total — no panel degraded gracefully, nothing rendered.
+
+     Two layers now fix that:
+
+       1. This resolver. Instead of assuming same-origin, it probes an ordered
+          list of candidate bases against /health with a short timeout and
+          remembers the winner:
+            ?api=<url>            → explicit per-visit override
+            <meta name="catena-api-base">
+            window.CATENA_API_BASE
+            localStorage catena-api-base
+            same-origin /api      → Cloudflare Pages / wrangler dev
+       2. If NO base answers, C.localEngine (dash/local-engine.js) runs the
+          real Hono app in the browser. See engine notes there.
+     ══════════════════════════════════════════════════════════════════════ */
+  C.API_BASES = (function () {
+    var list = [];
+    function add(v) {
+      if (!v) return;
+      var s = String(v).trim().replace(/\/+$/, "");
+      if (s && list.indexOf(s) === -1) list.push(s);
+    }
+    try {
+      var sp = new URLSearchParams(location.search);
+      var override = sp.get("api");
+      if (override) {
+        add(override);
+        try { localStorage.setItem("catena-api-base", override); } catch (e) {}
+      }
+    } catch (e) {}
+    var meta = document.querySelector('meta[name="catena-api-base"]');
+    if (meta) add(meta.getAttribute("content"));
+    add(window.CATENA_API_BASE);
+    try { add(localStorage.getItem("catena-api-base")); } catch (e) {}
+    add(location.origin + "/api");
+    return list;
+  })();
+
+  /** Resolved base, or the string "local" once the in-browser engine wins. */
+  C.apiBase = null;
+
+  function probe(base, timeoutMs) {
+    var ctrl = typeof AbortController === "function" ? new AbortController() : null;
+    var init = { headers: { accept: "application/json" } };
+    if (ctrl) init.signal = ctrl.signal;
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, timeoutMs || 4500) : null;
+    return fetch(base + "/health", init)
+      .then(function (r) {
+        if (timer) clearTimeout(timer);
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      })
+      .then(function (j) {
+        // Guard against a static host's SPA fallback returning index.html with
+        // a 200: only an actual Catena health envelope counts as a live base.
+        if (!j || j.app !== "catena") throw new Error("not a catena api");
+        return base;
+      })
+      .catch(function (err) {
+        if (timer) clearTimeout(timer);
+        throw err;
+      });
+  }
+
+  /** Resolves (and memoises) the API base. Never rejects. */
+  C.resolveApi = function () {
+    if (C._resolving) return C._resolving;
+    C._resolving = (function () {
+      var bases = C.API_BASES.slice();
+      function next() {
+        if (!bases.length) {
+          // No reachable worker anywhere → run the API in this browser.
+          if (C.localEngine) {
+            C.apiBase = "local";
+            C.setLive("degraded", "local engine");
+            return Promise.resolve("local");
+          }
+          C.apiBase = null;
+          return Promise.resolve(null);
+        }
+        var base = bases.shift();
+        return probe(base).then(
+          function (ok) { C.apiBase = ok; return ok; },
+          function () { return next(); }
+        );
+      }
+      return next();
+    })();
+    return C._resolving;
+  };
+
   /* ── API client ── */
   function qs(extra) {
     var p = new URLSearchParams();
@@ -62,31 +167,73 @@
 
   C.api = function (path, params, opts) {
     var o = opts || {};
-    var url = "/api" + path + "?" + qs(params);
-    var init = { headers: { accept: "application/json", "x-catena-user": C.state.uid } };
-    if (o.body) {
-      init.method = "POST";
-      init.headers["content-type"] = "application/json";
-      init.body = JSON.stringify(o.body);
-    }
-    var ctrl = typeof AbortController === "function" ? new AbortController() : null;
-    if (ctrl) init.signal = ctrl.signal;
-    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, o.timeout || 22000) : null;
+    var query = qs(params);
 
-    return fetch(url, init)
-      .then(function (r) {
-        if (timer) clearTimeout(timer);
-        if (!r.ok) throw new Error("HTTP " + r.status + " on " + path);
-        return r.json();
-      })
-      .then(function (j) {
-        if (j && j.provenance) C.renderProvenance(j.provenance, j.degraded);
-        return j;
-      })
-      .catch(function (err) {
-        if (timer) clearTimeout(timer);
-        throw err;
-      });
+    function buildInit() {
+      var init = { headers: { accept: "application/json", "x-catena-user": C.state.uid } };
+      if (o.body) {
+        init.method = "POST";
+        init.headers["content-type"] = "application/json";
+        init.body = JSON.stringify(o.body);
+      }
+      return init;
+    }
+
+    /* Runs the request against a concrete transport ("local" or an http base). */
+    function run(base) {
+      var init = buildInit();
+
+      if (base === "local") {
+        // Same Hono app, executed in-page. Response is a real Response object,
+        // so the .then chain below is identical for both transports.
+        return C.localEngine.fetch("/api" + path + "?" + query, init);
+      }
+
+      var ctrl = typeof AbortController === "function" ? new AbortController() : null;
+      if (ctrl) init.signal = ctrl.signal;
+      var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, o.timeout || 22000) : null;
+      return fetch(base + path + "?" + query, init).then(
+        function (r) { if (timer) clearTimeout(timer); return r; },
+        function (err) { if (timer) clearTimeout(timer); throw err; }
+      );
+    }
+
+    function handle(r, base) {
+      if (!r.ok) {
+        var e = new Error("HTTP " + r.status + " on " + path);
+        e.status = r.status;
+        e.base = base;
+        throw e;
+      }
+      return r.json();
+    }
+
+    return C.resolveApi().then(function (base) {
+      if (!base) {
+        throw new Error(
+          "No Catena API reachable. This build has no /api worker (static host). " +
+          "Deploy the Cloudflare Pages build, or pass ?api=<worker-origin>/api."
+        );
+      }
+      return run(base)
+        .then(function (r) { return handle(r, base); })
+        .catch(function (err) {
+          // A base that answered /health but fails a real route (cold worker,
+          // transient 5xx, network drop) must not kill the dashboard: fall back
+          // to the in-browser engine once, then retry there.
+          if (base !== "local" && C.localEngine) {
+            C.apiBase = "local";
+            C._resolving = Promise.resolve("local");
+            C.setLive("degraded", "local engine");
+            return run("local").then(function (r) { return handle(r, "local"); });
+          }
+          throw err;
+        })
+        .then(function (j) {
+          if (j && j.provenance) C.renderProvenance(j.provenance, j.degraded);
+          return j;
+        });
+    });
   };
 
   /* ── Formatting ── */

@@ -260,14 +260,28 @@ export async function fetchFdaSignal(drug: string, prov: Provenance[]): Promise<
 /* ── PubMed (NCBI E-utilities) with Europe PMC fallback ── */
 export type Citation = { pmid: string; title: string; journal: string; year: string; url: string }
 
+/**
+ * Detects a browser (DOM) runtime. Used to skip upstreams that do not send
+ * `access-control-allow-origin`, because in a browser those requests are killed
+ * by the CORS preflight and only produce a misleading "failed to fetch"
+ * provenance entry. On Workers/Node there is no CORS gate, so they are tried.
+ */
+const IS_BROWSER = typeof document !== 'undefined'
+
 export async function fetchLiterature(term: string, prov: Provenance[], retmax = 5): Promise<Citation[]> {
   const t = encodeURIComponent(term)
-  const search = await safeJson<any>(
-    `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=relevance&retmax=${retmax}&term=${t}&tool=catena&email=catena%40example.org`,
-    'PubMed E-utilities',
-    prov,
-    7000
-  )
+
+  // PubMed E-utilities send no CORS header (verified: 302 → blocked in-browser),
+  // so in local-engine mode we go straight to Europe PMC, which mirrors PubMed
+  // content and does send `access-control-allow-origin: *`.
+  const search = IS_BROWSER
+    ? null
+    : await safeJson<any>(
+        `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&sort=relevance&retmax=${retmax}&term=${t}&tool=catena&email=catena%40example.org`,
+        'PubMed E-utilities',
+        prov,
+        7000
+      )
   const ids: string[] = search?.esearchresult?.idlist || []
   if (ids.length) {
     const sum = await safeJson<any>(
@@ -331,7 +345,29 @@ export type FoodOut = {
   live: boolean
 }
 
+/**
+ * USDA note (verified 429):
+ * the shared `DEMO_KEY` is globally rate-limited and now answers HTTP 429 for
+ * this endpoint, so the nutrition panel was never actually live even when the
+ * worker was reachable. Rather than burn a request that is known to fail, we
+ * skip the call entirely when no real key is configured and record an explicit
+ * provenance entry, so the UI labels the panel non-live with the real reason
+ * ("no USDA_API_KEY") instead of a misleading "HTTP 429".
+ *
+ * Set USDA_API_KEY (free, instant, https://fdc.nal.usda.gov/api-key-signup)
+ * to make this panel live. See README → Environment variables.
+ */
 export async function fetchFood(query: string, key: string, prov: Provenance[]): Promise<FoodOut> {
+  const hasRealKey = Boolean(key) && key !== 'DEMO_KEY'
+  if (!hasRealKey) {
+    prov.push({
+      source: `USDA FoodData · ${query}`,
+      live: false,
+      fetchedAt: new Date().toISOString(),
+      detail: 'no USDA_API_KEY (DEMO_KEY is rate-limited: HTTP 429)'
+    })
+    return offlineFood(query)
+  }
   const url =
     `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(query)}` +
     `&pageSize=1&dataType=Foundation,SR%20Legacy,Survey%20(FNDDS)&api_key=${key}`
@@ -358,6 +394,11 @@ export async function fetchFood(query: string, key: string, prov: Provenance[]):
       live: true
     }
   }
+  return offlineFood(query)
+}
+
+/** Deterministic per-query nutrition estimate used when USDA is unavailable. */
+function offlineFood(query: string): FoodOut {
   const rng = seeded('food', query)
   return {
     name: query,
