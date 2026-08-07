@@ -91,6 +91,15 @@
       if (override) {
         add(override);
         try { localStorage.setItem("catena-api-base", override); } catch (e) {}
+      } else if (override === "") {
+        /* ESCAPE HATCH.
+           A non-empty ?api= is REMEMBERED in localStorage, which is what makes it
+           useful across visits — but it also made a typo permanent: once
+           `?api=https://typo.example/api` was stored, every later visit probed a
+           dead host first and paid the full probe timeout before falling through,
+           and nothing in the UI could clear it. An explicitly EMPTY `?api=` now
+           forgets the stored override and returns to same-origin resolution. */
+        try { localStorage.removeItem("catena-api-base"); } catch (e) {}
       }
     } catch (e) {}
     var meta = document.querySelector('meta[name="catena-api-base"]');

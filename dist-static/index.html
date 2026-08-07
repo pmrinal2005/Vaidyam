@@ -18,7 +18,9 @@
 <link rel="stylesheet" href="/static/styles.css" />
 <link rel="stylesheet" href="/static/reveal/reveal.css" />
 <link rel="preconnect" href="https://aspect-slam-99684872.figma.site" crossorigin />
-<link rel="preconnect" href="https://stream.mux.com" crossorigin />
+<!-- NOTE: the external HLS stream preconnect was removed together with the
+     reveal section's <video>. The reveal now paints a solid black backdrop, so
+     there is no streaming origin left to warm up. -->
 </head>
 <body>
 

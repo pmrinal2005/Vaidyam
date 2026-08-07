@@ -50,22 +50,89 @@ export async function safeJson<T>(
   }
 }
 
-/* ── Geolocation from Cloudflare request headers (zero-cost, no API) ── */
+/* ── Geolocation from edge request metadata (zero-cost, no API) ── */
 export type GeoCtx = { lat: number; lon: number; city: string; region: string; country: string; live: boolean }
 
+/** Decodes a possibly percent/UTF-8-encoded header city name (Vercel encodes them). */
+function decodeHeaderText(v: string | null | undefined): string {
+  if (!v) return ''
+  try {
+    return decodeURIComponent(v)
+  } catch {
+    return v
+  }
+}
+
+/**
+ * Resolves geo from whatever the host actually provides.
+ *
+ * HOST-AGNOSTIC BY DESIGN — this used to read ONLY `request.cf`, which exists
+ * exclusively on Cloudflare. On every other runtime `cf` is `undefined`, so with
+ * no explicit ?lat/?lon the function fell straight through to the hard-coded
+ * New Delhi default. That made weather/air-quality panels *look* live (the
+ * upstream really did answer 200) while describing a city the user was nowhere
+ * near — a silent wrong-data bug, worse than a visible failure.
+ *
+ * Resolution order, most trustworthy first:
+ *   1. explicit ?lat/?lon         — the browser Geolocation API, forwarded by
+ *                                   core.js; the only source the user consented to
+ *   2. `request.cf`               — Cloudflare Workers/Pages
+ *   3. `x-vercel-ip-*` headers    — Vercel Edge/Node functions
+ *   4. `x-nf-geo` (base64 JSON)   — Netlify
+ *   5. generic CDN headers        — Fastly/Akamai/Cloudflare `cf-ipcity` etc.
+ *   6. New Delhi default          — reported as `live: false` so the provenance
+ *                                   strip labels it, and never silently trusted
+ */
 export function geoFromRequest(req: Request, fallback?: { lat?: number; lon?: number }): GeoCtx {
   const cf = (req as any).cf || {}
-  const lat = Number(fallback?.lat ?? cf.latitude)
-  const lon = Number(fallback?.lon ?? cf.longitude)
-  const hasCf = Number.isFinite(Number(cf.latitude)) && Number.isFinite(Number(cf.longitude))
+  const h = (name: string): string => {
+    try {
+      return decodeHeaderText(req.headers?.get?.(name)) || ''
+    } catch {
+      return ''
+    }
+  }
+
+  // Netlify ships one base64 JSON blob rather than discrete headers.
+  let nf: any = {}
+  const nfRaw = h('x-nf-geo')
+  if (nfRaw) {
+    try {
+      nf = JSON.parse(typeof atob === 'function' ? atob(nfRaw) : nfRaw)
+    } catch {
+      nf = {}
+    }
+  }
+
+  const edgeLat = cf.latitude ?? h('x-vercel-ip-latitude') ?? nf?.latitude
+  const edgeLon = cf.longitude ?? h('x-vercel-ip-longitude') ?? nf?.longitude
+  const hasEdge = Number.isFinite(Number(edgeLat)) && Number.isFinite(Number(edgeLon))
+
+  // An explicit client fix (Geolocation API) always wins over IP inference.
+  const explicit = Number.isFinite(Number(fallback?.lat)) && Number.isFinite(Number(fallback?.lon))
+  const lat = Number(explicit ? fallback!.lat : edgeLat)
+  const lon = Number(explicit ? fallback!.lon : edgeLon)
+
+  const city =
+    String(cf.city || '') ||
+    h('x-vercel-ip-city') ||
+    String(nf?.city || '') ||
+    h('cf-ipcity') ||
+    (explicit ? 'Your location' : '')
+  const region = String(cf.region || '') || h('x-vercel-ip-country-region') || String(nf?.subdivision?.name || '')
+  const country =
+    String(cf.country || '') || h('x-vercel-ip-country') || String(nf?.country?.code || '') || h('cf-ipcountry')
+
   if (Number.isFinite(lat) && Number.isFinite(lon)) {
     return {
       lat,
       lon,
-      city: String(cf.city || 'Your area'),
-      region: String(cf.region || ''),
-      country: String(cf.country || ''),
-      live: hasCf || Boolean(fallback?.lat)
+      city: city || 'Your area',
+      region,
+      country,
+      // Live means "this really is where the request came from" — true for an
+      // explicit client fix or a real edge geo header, false for the default.
+      live: explicit || hasEdge
     }
   }
   return { lat: 28.6139, lon: 77.209, city: 'New Delhi', region: 'Delhi', country: 'IN', live: false }
