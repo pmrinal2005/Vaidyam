@@ -31,3 +31,9 @@ lerna-debug.log*
 
 # misc
 .DS_Store
+
+# Static build output
+dist/
+dist-static/
+.wrangler/
+.vercel/
