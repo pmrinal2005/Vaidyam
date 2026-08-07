@@ -1,5 +1,5 @@
 import { motion, useMotionTemplate, useScroll, useTransform, useAnimationFrame, useMotionValue } from 'motion/react';
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import OrbitImages from './components/OrbitImages';
 
 const orbitImagesData = [
@@ -11,67 +11,28 @@ const orbitImagesData = [
   "https://aspect-slam-99684872.figma.site/_components/v2/79eebc3801de595030a9e7fa875de4a77ede4f07/2adc4a2c178d6aaa68dda80fc42e7628372522d1.2adc4a2c.png",
 ];
 
-const HLS_SRC = "https://stream.mux.com/OD2Ny6q9anbQ9h7Vie3KnqDxFpzHM9sjwfhF029lfd600.m3u8";
-const HLS_CDN = "https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js";
-
 /**
- * The reveal background is delivered as an HLS manifest (Mux). Safari/iOS play
- * it natively from the <source> element; every other browser needs hls.js.
- * This attaches the player only when native playback is unavailable, so the
- * markup/values from the design spec stay untouched.
+ * BACKGROUND NOTE (Mux HLS removal)
+ * ---------------------------------
+ * The reveal previously streamed an external Mux HLS manifest
+ * (stream.mux.com/…m3u8) behind the orbit gallery. That dependency has been
+ * removed entirely: no <video>, no <source>, no hls.js loader, no external
+ * stream request. It is replaced by `.reveal-backdrop` — a pure-CSS animated
+ * motion-graphic backdrop (layered conic/radial gradient drifts + grain)
+ * defined in index.css.
+ *
+ * Why CSS instead of another video file:
+ *  • zero third-party network dependency (the m3u8 could 403/expire at any
+ *    time, which is what made the section fragile in the first place);
+ *  • no hls.js bundle (~140 KB) and no autoplay-policy failure modes;
+ *  • it is GPU-composited transform/opacity work only, so the scroll-driven
+ *    Framer Motion timeline below keeps its frame budget on mobile.
+ *
+ * CRITICAL: every Framer Motion value, keyframe array, offset and z-index in
+ * this component is byte-for-byte the spec's. Only the backdrop layer changed.
  */
-function useHlsBackground(videoRef: React.RefObject<HTMLVideoElement | null>) {
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    const nativeHls =
-      video.canPlayType('application/vnd.apple.mpegurl') !== '' ||
-      video.canPlayType('application/x-mpegURL') !== '';
-
-    if (nativeHls) {
-      video.play().catch(() => {});
-      return;
-    }
-
-    let hls: any = null;
-    let cancelled = false;
-
-    const attach = () => {
-      const Hls = (window as any).Hls;
-      if (cancelled || !Hls || !Hls.isSupported()) return;
-      hls = new Hls({ capLevelToPlayerSize: true, maxBufferLength: 12 });
-      hls.loadSource(HLS_SRC);
-      hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
-    };
-
-    if ((window as any).Hls) {
-      attach();
-    } else {
-      let script = document.querySelector<HTMLScriptElement>('script[data-hls-loader]');
-      if (!script) {
-        script = document.createElement('script');
-        script.src = HLS_CDN;
-        script.async = true;
-        script.dataset.hlsLoader = 'true';
-        document.head.appendChild(script);
-      }
-      script.addEventListener('load', attach);
-    }
-
-    return () => {
-      cancelled = true;
-      if (hls) hls.destroy();
-    };
-  }, [videoRef]);
-}
-
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  useHlsBackground(videoRef);
 
   const { scrollYProgress } = useScroll({
     target: containerRef,
@@ -118,9 +79,13 @@ export default function App() {
     <div ref={containerRef} className="relative w-full h-[600vh] bg-black">
       <div className="sticky top-0 w-full h-screen overflow-hidden text-white">
 
-        <video ref={videoRef} autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover z-0">
-          <source src="https://stream.mux.com/OD2Ny6q9anbQ9h7Vie3KnqDxFpzHM9sjwfhF029lfd600.m3u8" type="video/mp4" />
-        </video>
+        {/* Motion-graphic backdrop — replaces the removed Mux HLS <video>.
+            Occupies the exact same box and z-index the video did. */}
+        <div className="reveal-backdrop absolute inset-0 w-full h-full z-0" aria-hidden="true">
+          <span className="reveal-backdrop-sheen" />
+          <span className="reveal-backdrop-drift" />
+          <span className="reveal-backdrop-grain" />
+        </div>
 
         <div className="absolute inset-0 bg-black/10 z-0"></div>
 
