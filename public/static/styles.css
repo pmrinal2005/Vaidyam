@@ -489,11 +489,45 @@ html.reveal-active #bottom-blur { opacity: 0; }
   .desktop-header { display: flex !important; }
 }
 
-/* Mobile header internals */
-.mobile-header { gap: 8px; }
+/* ==========================================================================
+   Mobile header internals
+   --------------------------------------------------------------------------
+   ALIGNMENT FIX (Download pill sat low / crowded / overflowed on phones).
+   Three compounding causes, all addressed here:
+
+   1. NO SHARED CROSS-AXIS ROW. `.mobile-header` was `height: 100%` of an 80px
+      header while its two children were `36px`. Each child resolved its own
+      cross-axis position, so sub-pixel rounding of the 80px line box could land
+      them on different rows. Now the flex line itself is pinned to a single
+      explicit 36px row and every participant is `align-items: center`.
+
+   2. DOUBLE GUTTER. `.mobile-header { gap: 8px }` AND
+      `.mobile-left { margin-right: 16px }` both applied → a real 24px gutter
+      that no longer matched the header's 16px viewport padding, which is what
+      read as "misaligned" rather than "mis-sized". The margin is dropped; the
+      single source of truth is now `gap`.
+
+   3. LINE OVERFLOW. `.menu-pill-m.open { width: 100% }` grew inside a
+      `flex-grow: 1` parent while `.download-btn-m` was `flex-shrink: 0`, so the
+      CTA was pushed past the right padding edge. `.mobile-left` may now shrink
+      (`min-width: 0` + `flex: 1 1 auto`) and the CTA keeps its intrinsic width.
+   ========================================================================== */
+.mobile-header {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  /* Pin the flex line to one explicit row instead of the 80px header height,
+     so both children share a single, exactly-centred cross axis. */
+  height: 36px;
+  margin: auto 0;
+  width: 100%;
+  min-width: 0;
+}
 .mobile-left {
   display: flex; align-items: center; height: 36px;
-  flex-grow: 1; min-width: 0; margin-right: 16px; position: relative;
+  /* `flex: 1 1 auto` + `min-width: 0` lets this side yield when the nav pill
+     expands, so the Download CTA can never be pushed off the right edge. */
+  flex: 1 1 auto; min-width: 0; position: relative;
 }
 
 .logo-pill-m {
@@ -562,16 +596,57 @@ html.reveal-active #bottom-blur { opacity: 0; }
 .menu-links-m a:hover { color: #fff; }
 
 .download-btn-m {
-  height: 36px; padding: 0 14px;
-  background: #fff; border-radius: 9999px;
-  display: flex; align-items: center; gap: 6px;
-  color: #000; flex-shrink: 0;
+  height: 36px;
+  padding: 0 14px;
+  background: #fff;
+  border-radius: 9999px;
+  /* inline-flex + center on BOTH axes so the icon and label share one optical
+     baseline regardless of device pixel ratio. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #000;
+  /* Never shrink or grow: the pill keeps its intrinsic width and stays flush
+     with the header's 16px right padding. `align-self` guards against a stray
+     `align-items` on an ancestor. */
+  flex: 0 0 auto;
+  align-self: center;
+  box-sizing: border-box;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
   transition: background 0.15s, transform 0.15s;
 }
 .download-btn-m:hover { background: #e2e2e6; transform: scale(1.03); }
 .download-btn-m:active { transform: scale(0.97); }
-.download-btn-m i { font-size: 13px; color: #000; transform: translateY(-0.5px); }
-.download-btn-m span { font-size: 13px; font-weight: 500; color: #000; line-height: 1; }
+/* The half-pixel `translateY(-0.5px)` nudge was removed: Bootstrap Icons are
+   already baseline-aligned by `line-height: 1`, and at DPR 2/3 that half pixel
+   rounded inconsistently, putting the glyph and the word on different
+   baselines. Flex centring does the job exactly. */
+.download-btn-m i {
+  font-size: 13px;
+  color: #000;
+  line-height: 1;
+  display: block;
+  flex: 0 0 auto;
+}
+.download-btn-m span {
+  font-size: 13px;
+  font-weight: 500;
+  color: #000;
+  line-height: 1;
+  display: block;
+}
+
+/* Very narrow phones (<=380px, e.g. iPhone SE): drop the label so the pill can
+   never contend with the nav pill for horizontal space. The accessible name is
+   preserved by the element's aria-label in the markup. */
+@media (max-width: 380px) {
+  .download-btn-m { padding: 0; width: 36px; gap: 0; }
+  .download-btn-m span { display: none; }
+  .download-btn-m i { font-size: 15px; }
+}
 
 /* ── Reduced motion: show content statically ── */
 @media (prefers-reduced-motion: reduce) {

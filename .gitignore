@@ -32,8 +32,20 @@ lerna-debug.log*
 # misc
 .DS_Store
 
-# Static build output
+# Build output (all generated — never commit)
 dist/
 dist-static/
 .wrangler/
 .vercel/
+.reveal-build/
+
+# Generated reveal island bundle. Produced by `npm run build:reveal` from
+# src/reveal/*. Committing it caused a *stale bundle* bug: the compiled JS kept
+# serving a removed Mux HLS <video> long after App.tsx had dropped it, because
+# nothing forced a rebuild. Always generated, never tracked.
+public/static/reveal/
+
+# Editor duplicate artifacts (e.g. "core - Copy.js") — these shadowed real
+# sources during review and must never be committed.
+* - Copy.*
+*\ -\ Copy.*

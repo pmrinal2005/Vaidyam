@@ -86,6 +86,118 @@
 }
 
 /* ==========================================================================
+   MOTION-GRAPHIC BACKDROP  (replaces the removed Mux HLS <video>)
+   --------------------------------------------------------------------------
+   The reveal used to stream `stream.mux.com/…m3u8` behind the orbit gallery.
+   That is gone: no <video>, no <source>, no hls.js. This is its replacement.
+
+   Why pure CSS rather than another video file:
+     • no third-party stream that can 403 / expire / rate-limit;
+     • no hls.js polyfill (~140 KB) and no autoplay-policy failure path;
+     • only `transform` and `opacity` animate, so every layer is GPU-composited
+       and the scroll-driven Framer Motion timeline keeps its frame budget on
+       mobile. No `filter`/`background-position` animation (those repaint).
+
+   Occupies exactly the same box + z-index the <video> did, so the sections
+   above and below the reveal are untouched.
+   ========================================================================== */
+.reveal-backdrop {
+  overflow: hidden;
+  background:
+    radial-gradient(120% 100% at 18% 8%,  #16203a 0%, transparent 58%),
+    radial-gradient(120% 110% at 84% 86%, #2a1630 0%, transparent 60%),
+    linear-gradient(168deg, #05070c 0%, #0a0d16 46%, #04050a 100%);
+  /* Own compositing layer so the animated children never repaint the orbit. */
+  transform: translateZ(0);
+  contain: paint;
+}
+
+.reveal-backdrop > span {
+  position: absolute;
+  display: block;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+/* Layer 1 — slow conic sheen sweep (the "light passing over water" beat). */
+.reveal-backdrop-sheen {
+  /* Oversized + centred so rotation never exposes a corner. */
+  top: 50%;
+  left: 50%;
+  width: 200vmax;
+  height: 200vmax;
+  margin: -100vmax 0 0 -100vmax;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    rgba(125, 211, 252, 0.14) 42deg,
+    rgba(253, 255, 183, 0.20) 74deg,
+    rgba(167, 139, 250, 0.13) 116deg,
+    transparent 168deg,
+    transparent 360deg
+  );
+  opacity: 0.85;
+  animation: reveal-sheen-spin 26s linear infinite;
+}
+
+/* Layer 2 — counter-drifting soft blobs for parallax depth. */
+.reveal-backdrop-drift {
+  top: -25%;
+  left: -25%;
+  width: 150%;
+  height: 150%;
+  background:
+    radial-gradient(38% 30% at 26% 34%, rgba(110, 231, 245, 0.20) 0%, transparent 70%),
+    radial-gradient(34% 28% at 74% 62%, rgba(255, 143, 163, 0.17) 0%, transparent 72%),
+    radial-gradient(30% 26% at 52% 84%, rgba(253, 255, 183, 0.14) 0%, transparent 74%);
+  animation: reveal-drift 34s ease-in-out infinite alternate;
+}
+
+/* Layer 3 — static SVG grain, gently pulsed. Keeps the gradients from banding
+   on wide-gamut phone displays. Data-URI: no extra network request. */
+.reveal-backdrop-grain {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.14;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  animation: reveal-grain-pulse 7s steps(4, end) infinite;
+}
+
+@keyframes reveal-sheen-spin {
+  from { transform: rotate(0deg)   scale(1);    }
+  50%  { transform: rotate(180deg) scale(1.08); }
+  to   { transform: rotate(360deg) scale(1);    }
+}
+
+@keyframes reveal-drift {
+  from { transform: translate3d(-3%, -2%, 0) scale(1.04); opacity: 0.9; }
+  to   { transform: translate3d( 3%,  2%, 0) scale(1.12); opacity: 1;   }
+}
+
+@keyframes reveal-grain-pulse {
+  0%, 100% { opacity: 0.12; }
+  50%      { opacity: 0.17; }
+}
+
+/* Phones: trim the heaviest layer. The conic sheen is the only expensive
+   composite; the grain overlay costs a full-screen blend every pulse. */
+@media (max-width: 767px) {
+  .reveal-backdrop-sheen { animation-duration: 34s; opacity: 0.6; }
+  .reveal-backdrop-grain { display: none; }
+}
+
+/* Save-data / low-power: hold a static gradient, no animation at all. */
+@media (prefers-reduced-motion: reduce) {
+  .reveal-backdrop-sheen,
+  .reveal-backdrop-drift,
+  .reveal-backdrop-grain { animation: none !important; }
+  .reveal-backdrop-sheen { opacity: 0.5; transform: rotate(28deg); }
+}
+
+/* ==========================================================================
    Responsive layout overrides — positioning/type scale only.
    No Framer Motion value is altered anywhere here.
    ========================================================================== */
