@@ -1,15 +1,14 @@
 /**
- * Next.js App Router catch-all — mounts the Catena/Vaidyam Hono API at /api/*.
+ * Next.js App Router catch-all — mounts the Catena/Vaidyam API at /api/*.
  *
  * Runs on the Node.js runtime (Vercel serverless / local `next start`).
- * Secrets come from process.env and are injected into c.env so src/lib/vaidyam
- * stays host-agnostic (reads c.env.GROQ_API_KEY etc.).
- *
- * No Cloudflare Workers / Pages / wrangler dependency — pure Next.js + Postgres.
+ * Secrets come from process.env. No Cloudflare Workers/Pages, no Hono —
+ * this is a plain Next.js Route Handler dispatching to the MiniRouter
+ * defined in src/lib/vaidyam/api.ts.
  */
-import { Hono } from "hono";
-import { handle } from "hono/vercel";
+import type { NextRequest } from "next/server";
 import api from "@/lib/vaidyam/api";
+import { createApiContext } from "@/lib/vaidyam/router";
 import type { Bindings } from "@/lib/vaidyam/types";
 
 export const runtime = "nodejs";
@@ -30,38 +29,34 @@ const ENV_KEYS = [
 
 function envFromProcess(): Bindings {
   const out: Record<string, string> = {};
-  try {
-    const src =
-      typeof process !== "undefined" && process.env
-        ? (process.env as Record<string, string | undefined>)
-        : {};
-    for (const k of ENV_KEYS) {
-      const v = src[k];
-      if (typeof v === "string" && v.trim()) out[k] = v.trim();
-    }
-  } catch {
-    /* empty env degrades gracefully */
+  for (const k of ENV_KEYS) {
+    const v = process.env[k];
+    if (typeof v === "string" && v.trim()) out[k] = v.trim();
   }
   return out as Bindings;
 }
 
-const app = new Hono<{ Bindings: Bindings }>().basePath("/api");
+async function handleRequest(request: NextRequest): Promise<Response> {
+  const url = new URL(request.url);
+  // Strip the /api prefix — the MiniRouter registers routes like "/health".
+  let path = url.pathname.replace(/^\/api/, "");
+  if (!path) path = "/";
+  const ctx = createApiContext<Bindings>(request, envFromProcess());
+  return api.dispatch(request.method, path, ctx);
+}
 
-app.use("*", async (c, next) => {
-  (c as { env?: Bindings }).env = {
-    ...envFromProcess(),
-    ...((c as { env?: Bindings }).env || {}),
-  };
-  await next();
-});
+export const GET = handleRequest;
+export const POST = handleRequest;
+export const PUT = handleRequest;
+export const PATCH = handleRequest;
+export const DELETE = handleRequest;
 
-app.route("/", api);
-
-const handler = handle(app);
-
-export const GET = handler;
-export const POST = handler;
-export const PUT = handler;
-export const PATCH = handler;
-export const DELETE = handler;
-export const OPTIONS = handler;
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "access-control-allow-methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+      "access-control-allow-headers": "content-type,x-catena-user",
+    },
+  });
+}

@@ -6,8 +6,7 @@
  * reports per-source provenance so the UI can label degraded panels. Nothing is
  * hard-coded: the deterministic fallbacks only engage when an upstream fails.
  */
-import { Hono } from 'hono'
-import { cors } from 'hono/cors'
+import { MiniRouter, type ApiContext } from './router'
 import type { Bindings, Envelope, Provenance } from './types'
 import {
   geoFromRequest,
@@ -28,8 +27,7 @@ import { seeded, clamp, round, gauss, sha256 } from './rand'
 import { sbSelect, supabaseConfigured } from './supabase'
 import { ensureTwin, loadRecentObservations, pgConfigured } from './db-persist'
 
-const api = new Hono<{ Bindings: Bindings }>()
-api.use('/*', cors())
+const api = new MiniRouter<Bindings>()
 
 const CACHE = new Map<string, { at: number; value: unknown }>()
 const TTL = 90_000
@@ -53,12 +51,12 @@ function envelope<T>(data: T, prov: Provenance[], started: number): Envelope<T> 
   }
 }
 
-function userId(c: any): string {
+function userId(c: ApiContext<Bindings>): string {
   return String(c.req.query('uid') || c.req.header('x-catena-user') || 'demo-twin-01')
 }
 
 /** Shared twin context: live env → vitals → graph. Cached per user/hour. */
-async function twinContext(c: any) {
+async function twinContext(c: ApiContext<Bindings>) {
   const uid = userId(c)
   const geo = geoFromRequest(c.req.raw, {
     lat: c.req.query('lat') ? Number(c.req.query('lat')) : undefined,
@@ -85,7 +83,7 @@ async function twinContext(c: any) {
 /* ══════════════════════════════════════════════════════════════════
    Health / meta
    ══════════════════════════════════════════════════════════════════ */
-api.get('/health', async (c) => {
+api.get('/health', async (c: ApiContext<Bindings>) => {
   const env = c.env || {}
   const postgres = await pgConfigured()
   return c.json({
@@ -111,7 +109,7 @@ api.get('/health', async (c) => {
 /* ══════════════════════════════════════════════════════════════════
    Overview — the dashboard's primary payload
    ══════════════════════════════════════════════════════════════════ */
-api.get('/overview', async (c) => {
+api.get('/overview', async (c: ApiContext<Bindings>) => {
   const started = Date.now()
   const ctx = await twinContext(c)
   const prov = ctx.prov.slice()
@@ -215,7 +213,7 @@ api.get('/overview', async (c) => {
 /* ══════════════════════════════════════════════════════════════════
    Causal knowledge graph + HippoRAG retrieval
    ══════════════════════════════════════════════════════════════════ */
-api.get('/graph', async (c) => {
+api.get('/graph', async (c: ApiContext<Bindings>) => {
   const started = Date.now()
   const ctx = await twinContext(c)
   const q = c.req.query('q') || ''
@@ -256,7 +254,7 @@ api.get('/graph', async (c) => {
 /* ══════════════════════════════════════════════════════════════════
    Multi-agent swarm + cascade telemetry
    ══════════════════════════════════════════════════════════════════ */
-api.post('/swarm', async (c) => {
+api.post('/swarm', async (c: ApiContext<Bindings>) => {
   const started = Date.now()
   const ctx = await twinContext(c)
   const body = (await c.req.json().catch(() => ({}))) as { query?: string; live?: boolean }
@@ -345,7 +343,7 @@ api.post('/swarm', async (c) => {
   )
 })
 
-api.get('/cascade', async (c) => {
+api.get('/cascade', async (c: ApiContext<Bindings>) => {
   const started = Date.now()
   const ctx = await twinContext(c)
   const rng = seeded('casc', ctx.uid, new Date().toISOString().slice(0, 13))
@@ -401,7 +399,7 @@ api.get('/cascade', async (c) => {
 /* ══════════════════════════════════════════════════════════════════
    Counterfactual simulation (+ live literature grounding)
    ══════════════════════════════════════════════════════════════════ */
-api.post('/counterfactual', async (c) => {
+api.post('/counterfactual', async (c: ApiContext<Bindings>) => {
   const started = Date.now()
   const ctx = await twinContext(c)
   const prov = ctx.prov.slice()
@@ -433,7 +431,7 @@ api.post('/counterfactual', async (c) => {
   )
 })
 
-api.get('/counterfactual/levers', async (c) => {
+api.get('/counterfactual/levers', async (c: ApiContext<Bindings>) => {
   const started = Date.now()
   const ctx = await twinContext(c)
   return c.json(envelope({ levers: buildLevers(ctx.vitals) }, ctx.prov, started))
@@ -442,7 +440,7 @@ api.get('/counterfactual/levers', async (c) => {
 /* ══════════════════════════════════════════════════════════════════
    Environment / exposure
    ══════════════════════════════════════════════════════════════════ */
-api.get('/environment', async (c) => {
+api.get('/environment', async (c: ApiContext<Bindings>) => {
   const started = Date.now()
   const ctx = await twinContext(c)
   const { air, weather, geo, vitals, graph } = ctx
@@ -505,7 +503,7 @@ api.get('/environment', async (c) => {
 /* ══════════════════════════════════════════════════════════════════
    Medication — openFDA grounded
    ══════════════════════════════════════════════════════════════════ */
-api.get('/medications', async (c) => {
+api.get('/medications', async (c: ApiContext<Bindings>) => {
   const started = Date.now()
   const ctx = await twinContext(c)
   const prov = ctx.prov.slice()
@@ -562,7 +560,7 @@ api.get('/medications', async (c) => {
 /* ══════════════════════════════════════════════════════════════════
    Nutrition — USDA FoodData Central grounded
    ══════════════════════════════════════════════════════════════════ */
-api.get('/nutrition', async (c) => {
+api.get('/nutrition', async (c: ApiContext<Bindings>) => {
   const started = Date.now()
   const ctx = await twinContext(c)
   const prov = ctx.prov.slice()
@@ -611,7 +609,7 @@ api.get('/nutrition', async (c) => {
 /* ══════════════════════════════════════════════════════════════════
    Privacy — zk attestations
    ══════════════════════════════════════════════════════════════════ */
-api.get('/zk/claims', async (c) => {
+api.get('/zk/claims', async (c: ApiContext<Bindings>) => {
   const started = Date.now()
   const ctx = await twinContext(c)
   const windowDays = clamp(Number(c.req.query('window') || 30), 7, 30)
@@ -634,7 +632,7 @@ api.get('/zk/claims', async (c) => {
   )
 })
 
-api.post('/zk/prove', async (c) => {
+api.post('/zk/prove', async (c: ApiContext<Bindings>) => {
   const started = Date.now()
   const ctx = await twinContext(c)
   const body = (await c.req.json().catch(() => ({}))) as { claim?: string; windowDays?: number }
@@ -645,7 +643,7 @@ api.post('/zk/prove', async (c) => {
   return c.json(envelope({ attestation: att, shareToken: att.proofDigest.slice(2, 34) }, ctx.prov, started))
 })
 
-api.get('/zk/verify', async (c) => {
+api.get('/zk/verify', async (c: ApiContext<Bindings>) => {
   const id = c.req.query('id') || ''
   const digest = await sha256(`verify|${id}`)
   return c.json({
@@ -663,7 +661,7 @@ api.get('/zk/verify', async (c) => {
 /* ══════════════════════════════════════════════════════════════════
    Public health — DP federated aggregation
    ══════════════════════════════════════════════════════════════════ */
-api.get('/public-health', async (c) => {
+api.get('/public-health', async (c: ApiContext<Bindings>) => {
   const started = Date.now()
   const ctx = await twinContext(c)
   const prov = ctx.prov.slice()
@@ -716,7 +714,7 @@ api.get('/public-health', async (c) => {
 /* ══════════════════════════════════════════════════════════════════
    Memory — vector quantization + storage budget
    ══════════════════════════════════════════════════════════════════ */
-api.get('/memory', async (c) => {
+api.get('/memory', async (c: ApiContext<Bindings>) => {
   const started = Date.now()
   const ctx = await twinContext(c)
   const vectorCount = ctx.graph.stats.nodes * 42 + ctx.vitals.length * 18
@@ -759,7 +757,7 @@ api.get('/memory', async (c) => {
 /* ══════════════════════════════════════════════════════════════════
    Clinician brief
    ══════════════════════════════════════════════════════════════════ */
-api.get('/clinician-brief', async (c) => {
+api.get('/clinician-brief', async (c: ApiContext<Bindings>) => {
   const started = Date.now()
   const ctx = await twinContext(c)
   const prov = ctx.prov.slice()
@@ -832,7 +830,7 @@ api.get('/clinician-brief', async (c) => {
 /* ══════════════════════════════════════════════════════════════════
    Ingestion feed (Layer 0 telemetry)
    ══════════════════════════════════════════════════════════════════ */
-api.get('/ingestion', async (c) => {
+api.get('/ingestion', async (c: ApiContext<Bindings>) => {
   const started = Date.now()
   const ctx = await twinContext(c)
   const rng = seeded('ingest', ctx.uid, new Date().toISOString().slice(0, 13))
@@ -885,7 +883,7 @@ api.get('/ingestion', async (c) => {
 /* ══════════════════════════════════════════════════════════════════
    Literature passthrough
    ══════════════════════════════════════════════════════════════════ */
-api.get('/literature', async (c) => {
+api.get('/literature', async (c: ApiContext<Bindings>) => {
   const started = Date.now()
   const prov: Provenance[] = []
   const term = c.req.query('q') || 'causal inference AND digital health'
@@ -896,7 +894,7 @@ api.get('/literature', async (c) => {
 /* ══════════════════════════════════════════════════════════════════
    SaaS surfaces / business model
    ══════════════════════════════════════════════════════════════════ */
-api.get('/saas', async (c) => {
+api.get('/saas', async (c: ApiContext<Bindings>) => {
   const started = Date.now()
   const ctx = await twinContext(c)
   const rng = seeded('saas', ctx.uid)

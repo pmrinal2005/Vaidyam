@@ -1,10 +1,15 @@
 import type { NextConfig } from "next";
 
+/**
+ * Plain Next.js configuration — no Cloudflare adapters, no Hono, no
+ * `@cloudflare/next-on-pages` / wrangler integration. This app deploys as a
+ * standard Next.js app on Vercel (or any Node.js host) with real serverless
+ * `/api/*` route handlers.
+ */
 const nextConfig: NextConfig = {
-  // Allow the large prebuilt reveal island and dashboard scripts under /public.
   poweredByHeader: false,
   reactStrictMode: true,
-  // External packages that should not be bundled into edge (we use nodejs runtime).
+  // pg/drizzle use Node.js APIs that must not be bundled for edge runtimes.
   serverExternalPackages: ["pg", "drizzle-orm"],
   async headers() {
     return [
