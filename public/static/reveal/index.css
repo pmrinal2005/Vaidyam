@@ -1,0 +1,195 @@
+/* ==========================================================================
+   Reveal section (opening motion-graphic transition) — Tailwind v4 entry
+   --------------------------------------------------------------------------
+   CASCADE NOTE (important):
+   The host site's public/static/styles.css is *unlayered*, and unlayered
+   declarations always beat layered ones regardless of specificity. Its global
+   `* { margin:0; padding:0 }` reset would therefore override every Tailwind
+   spacing utility if utilities were emitted inside `@layer utilities`.
+   So Tailwind's theme + utilities are imported WITHOUT a layer, while our own
+   element-level resets are parked in `@layer base` so they can never outrank
+   a utility.
+
+   Tailwind's Preflight is deliberately NOT imported: the host already ships an
+   equivalent global reset, and Preflight would restyle the pre-existing
+   SynapseX sections.
+   ========================================================================== */
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600&family=Great+Vibes&display=swap');
+
+@import "tailwindcss/theme.css";
+@import "tailwindcss/utilities.css";
+
+@source "./";
+
+@theme {
+  --font-serif: "Instrument Serif", serif;
+  --font-sans: "Manrope", sans-serif;
+  --font-script: "Great Vibes", cursive;
+}
+
+/* --------------------------------------------------------------------------
+   Scoped element resets — layered so utilities always win.
+   -------------------------------------------------------------------------- */
+@layer base {
+  #reveal-root,
+  #reveal-root *,
+  #reveal-root *::before,
+  #reveal-root *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    border: 0 solid;
+  }
+
+  #reveal-root {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    line-height: 1.5;
+  }
+
+  #reveal-root button {
+    font-family: inherit;
+    background: none;
+    cursor: pointer;
+    color: inherit;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  #reveal-root svg { display: block; }
+
+  #reveal-root img,
+  #reveal-root video {
+    display: block;
+    max-width: 100%;
+  }
+}
+
+/* ==========================================================================
+   Host-page integration
+   The island sits above the host's fixed video layer (z 1) and progressive
+   bottom blur (z 30), and below the fixed header (z 50). `isolation` keeps
+   its internal z ladder (z-20 / z-[60]) from competing with host chrome.
+   ========================================================================== */
+#reveal-root {
+  position: relative;
+  z-index: 40;
+  isolation: isolate;
+  background: #000;
+}
+
+/* Reserve exactly one viewport before hydration so the page never shows a
+   600vh blank gap if the bundle is slow (or fails) to load. */
+#reveal-root:not([data-mounted="true"]) {
+  height: 100vh;
+}
+
+/* ==========================================================================
+   REVEAL BACKDROP  (replaces the removed Mux HLS <video>)
+   --------------------------------------------------------------------------
+   The reveal used to stream `stream.mux.com/…m3u8` behind the orbit gallery.
+   That is gone entirely: no <video>, no <source>, no hls.js, no preconnect.
+   Its replacement is a SOLID BLACK fill, per requirement.
+
+   Why solid black rather than another stream / an animated gradient:
+     • no third-party stream that can 403, expire or rate-limit — the external
+       manifest was the single point of failure for this whole section;
+     • no hls.js polyfill (~140 KB) and no autoplay-policy failure path;
+     • ZERO paint and ZERO composite work behind the orbit, so the entire frame
+       budget goes to the scroll-driven Framer Motion timeline. This matters
+       most on mid-range phones, where the orbit animates six 520px items;
+     • maximum contrast for the white clip-path panel that irises open over it —
+       that iris IS the opening motion-graphic transition.
+
+   Occupies exactly the same box + z-index the <video> did, so the sections
+   above (#hero-section, #cinematic-section, #stats-section) and below
+   (#main-footer) are completely untouched.
+   ========================================================================== */
+.reveal-backdrop {
+  background-color: #000;
+  /* Own compositing layer, so this static fill is rasterised once and never
+     re-paints while the orbit above it animates. */
+  transform: translateZ(0);
+  contain: paint;
+}
+
+/* ==========================================================================
+   Responsive layout overrides — positioning/type scale only.
+   No Framer Motion value is altered anywhere here.
+   ========================================================================== */
+
+/* Tablet / small laptop */
+@media (max-width: 1023px) {
+  #reveal-tag-2k26 { right: 24px !important; top: 104px !important; }
+  #reveal-cta-block { right: 24px !important; bottom: 40px !important; }
+  #reveal-cta-block > p { width: 210px !important; }
+}
+
+/* Phones */
+@media (max-width: 767px) {
+  #reveal-center-text { top: 46% !important; width: 100%; padding: 0 20px; }
+  #reveal-center-text > div { align-items: center; }
+  #reveal-center-text > div > div {
+    white-space: normal;
+    text-align: center;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  #reveal-center-text span[class*="text-[45px]"] { font-size: clamp(26px, 8.4vw, 45px) !important; }
+  #reveal-center-text span[class*="text-[28px]"] { font-size: clamp(18px, 5.6vw, 28px) !important; }
+
+  #reveal-tag-2k26 {
+    top: 88px !important;
+    left: 20px !important;
+    right: auto !important;
+  }
+  #reveal-tag-2k26 span:first-child { font-size: 28px !important; margin-bottom: 6px !important; }
+  #reveal-tag-2k26 span:last-child { font-size: 11px !important; line-height: 15px !important; }
+
+  /* Relocated to the opposite top corner so it can never collide with the CTA. */
+  #reveal-tag-collection {
+    top: 88px !important;
+    right: 20px !important;
+    bottom: auto !important;
+    left: auto !important;
+    align-items: flex-end !important;
+    text-align: right;
+  }
+  #reveal-tag-collection span:first-child { font-size: 28px !important; }
+  #reveal-tag-collection span:last-child { font-size: 11px !important; }
+
+  #reveal-cta-block {
+    left: 20px !important;
+    right: 20px !important;
+    bottom: 28px !important;
+    align-items: center !important;
+  }
+  #reveal-cta-block > p {
+    width: 100% !important;
+    max-width: 320px;
+    font-size: 11px !important;
+    line-height: 16px !important;
+    margin-bottom: 16px !important;
+    text-align: center;
+  }
+}
+
+/* Short/landscape phones — stop the tags and CTA stacking onto the wordmark. */
+@media (max-height: 520px) and (max-width: 1023px) {
+  #reveal-tag-2k26 span:last-child,
+  #reveal-tag-collection span:last-child,
+  #reveal-cta-block > p { display: none !important; }
+  #reveal-cta-block { bottom: 16px !important; }
+  #reveal-tag-2k26,
+  #reveal-tag-collection { top: 72px !important; }
+}
+
+/* Respect reduced-motion: hold the reveal in its open state. */
+@media (prefers-reduced-motion: reduce) {
+  #reveal-root * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

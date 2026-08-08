@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+/* Base reset — landing + dashboard bring their own full stylesheets. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+/* Utility used by a few Next-only chrome pieces */
+.visually-hidden-next {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

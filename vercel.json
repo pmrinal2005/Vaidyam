@@ -1,12 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": null,
-  "//buildCommand": "Runs build:assets (reveal island + local engine) THEN copies public/ \u2192 dist-static/. Pointing this at `node scripts/build-static.mjs` alone was the root cause of the stale-bundle bug in DIAGNOSIS.md \u00a72: that script only copies files, so a committed bundle survived every source edit. Both generated bundles are now gitignored and produced here. build-static.mjs additionally FAILS the build if any required artifact is missing, so an incomplete deploy can never reach production again.",
-  "buildCommand": "npm run build:static",
-  "outputDirectory": "dist-static",
-  "installCommand": "npm install --no-audit --no-fund",
-  "cleanUrls": true,
-  "trailingSlash": false,
+  "framework": "nextjs",
   "headers": [
     {
       "source": "/static/(.*)",
@@ -42,13 +36,6 @@
           "value": "SAMEORIGIN"
         }
       ]
-    }
-  ],
-  "//rewrites": "The SPA fallback deliberately EXCLUDES /api/* and /static/*. Rewriting /api/* to index.html made the static host answer the dashboard's probe with 200 + HTML, so core.js had to parse HTML as JSON before it could reject it \u2014 and it would now also shadow the Edge Function above. Excluding the prefix lets the function serve /api/*, and on a host without it the request 404s immediately, which is the fastest possible handoff to the in-browser local engine. /static/* is excluded so a genuinely missing asset 404s instead of silently returning the landing page.",
-  "rewrites": [
-    {
-      "source": "/((?!api/|static/).*)",
-      "destination": "/index.html"
     }
   ]
 }
