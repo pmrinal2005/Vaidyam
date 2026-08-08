@@ -2,7 +2,7 @@
  * Supabase REST adapter (Postgres + pgvector persistence for the twin).
  *
  * Uses the PostgREST HTTP surface only — no SDK, no Node APIs, so it runs
- * unchanged on Cloudflare Workers. When SUPABASE_URL / keys are absent every
+ * unchanged across hosts. When SUPABASE_URL / keys are absent every
  * call resolves to null and the API layer serves its computed twin instead, so
  * the dashboard is fully functional before any database exists.
  */
@@ -11,10 +11,10 @@ import type { Bindings, Provenance } from './types'
 /**
  * ENV-SAFETY NOTE
  * ---------------
- * `env` is NOT guaranteed to be an object. On Cloudflare Pages `c.env` is
+ * `env` is NOT guaranteed to be an object. On some edge hosts `c.env` is
  * populated, but the same Hono app is also mounted:
  *   • in the browser by src/local/engine.ts (local fallback engine), and
- *   • under `wrangler pages dev` before any binding exists,
+ *   • under `local dev` before any binding exists,
  * where `c.env` is `undefined`. The previous code dereferenced `env.SUPABASE_URL`
  * directly, so `supabaseConfigured(undefined)` threw a TypeError — turning what
  * should have been a graceful "not configured, use the computed twin" path into

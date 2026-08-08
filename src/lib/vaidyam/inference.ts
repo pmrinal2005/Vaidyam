@@ -28,7 +28,7 @@ type ProviderCfg = {
  * ENV-SAFETY NOTE
  * ---------------
  * `env` may be `undefined` — `c.env` is absent when this same Hono app runs in
- * the browser via src/local/engine.ts, and under `wrangler pages dev` before
+ * the browser local-engine fallback, and under local Next.js dev before
  * bindings exist. Dereferencing a key off `undefined` threw a
  * TypeError, which surfaced as a 500 on /health, /cascade, /swarm and /saas
  * instead of the intended "no key → deterministic reasoner" degradation.

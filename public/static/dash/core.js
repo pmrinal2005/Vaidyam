@@ -30,7 +30,7 @@
     C.state.uid = "demo-twin-01";
   }
 
-  /* ── Geolocation (optional; API falls back to Cloudflare edge geo) ── */
+  /* ── Geolocation (optional; API falls back to edge geo headers or New Delhi default) ── */
   C.requestGeo = function () {
     return new Promise(function (resolve) {
       if (!navigator.geolocation) return resolve(null);
@@ -50,33 +50,21 @@
   };
 
   /* ══════════════════════════════════════════════════════════════════════
-     API BASE RESOLUTION  —  root cause of "HTTP 404 on /overview"
+     API BASE RESOLUTION
      ----------------------------------------------------------------------
-     The old client hard-coded a same-origin relative path:
+     Primary host is Next.js (Vercel / local) with real serverless /api/*
+     routes (Hono mounted at src/app/api/[[...route]]). Same-origin /api is
+     therefore the default and preferred base.
 
-         var url = "/api" + path + "?" + qs(params);
+     Candidate order:
+       ?api=<url>                 → explicit per-visit override
+       <meta name="catena-api-base">
+       window.CATENA_API_BASE
+       localStorage catena-api-base
+       same-origin /api           → Next.js App Router (this build)
 
-     `/api/*` is answered by the Hono worker in src/api/index.ts, which only
-     exists in the Cloudflare Pages build (dist/_worker.js). But the project's
-     configured target is Vercel STATIC (vercel.json → outputDirectory
-     "dist-static"), an artifact with no serverless function at all. So
-     `/api/overview` missed every file on the static host and returned 404,
-     which C.api() surfaced verbatim as "HTTP 404 on /overview". Because
-     C.load()'s .catch replaces the entire view with C.errBox, the failure was
-     total — no panel degraded gracefully, nothing rendered.
-
-     Two layers now fix that:
-
-       1. This resolver. Instead of assuming same-origin, it probes an ordered
-          list of candidate bases against /health with a short timeout and
-          remembers the winner:
-            ?api=<url>            → explicit per-visit override
-            <meta name="catena-api-base">
-            window.CATENA_API_BASE
-            localStorage catena-api-base
-            same-origin /api      → Cloudflare Pages / wrangler dev
-       2. If NO base answers, C.localEngine (dash/local-engine.js) runs the
-          real Hono app in the browser. See engine notes there.
+     If no base answers /health with { app: "catena" }, fall back to the
+     optional in-browser local engine stub so panels still degrade gracefully.
      ══════════════════════════════════════════════════════════════════════ */
   C.API_BASES = (function () {
     var list = [];
@@ -85,6 +73,7 @@
       var s = String(v).trim().replace(/\/+$/, "");
       if (s && list.indexOf(s) === -1) list.push(s);
     }
+    var sameOrigin = location.origin + "/api";
     try {
       var sp = new URLSearchParams(location.search);
       var override = sp.get("api");
@@ -92,21 +81,25 @@
         add(override);
         try { localStorage.setItem("catena-api-base", override); } catch (e) {}
       } else if (override === "") {
-        /* ESCAPE HATCH.
-           A non-empty ?api= is REMEMBERED in localStorage, which is what makes it
-           useful across visits — but it also made a typo permanent: once
-           `?api=https://typo.example/api` was stored, every later visit probed a
-           dead host first and paid the full probe timeout before falling through,
-           and nothing in the UI could clear it. An explicitly EMPTY `?api=` now
-           forgets the stored override and returns to same-origin resolution. */
+        /* ESCAPE HATCH: empty ?api= clears a remembered override. */
         try { localStorage.removeItem("catena-api-base"); } catch (e) {}
       }
     } catch (e) {}
+    /* Next.js host: same-origin /api is always first so a stale remote
+       override in localStorage cannot 404 the dashboard. */
+    add(sameOrigin);
     var meta = document.querySelector('meta[name="catena-api-base"]');
     if (meta) add(meta.getAttribute("content"));
     add(window.CATENA_API_BASE);
-    try { add(localStorage.getItem("catena-api-base")); } catch (e) {}
-    add(location.origin + "/api");
+    try {
+      var stored = localStorage.getItem("catena-api-base");
+      /* Ignore stored bases that look like dead CF/static leftovers. */
+      if (stored && /pages\.dev|workers\.dev|dist-static|cloudflare/i.test(stored)) {
+        try { localStorage.removeItem("catena-api-base"); } catch (e2) {}
+      } else {
+        add(stored);
+      }
+    } catch (e) {}
     return list;
   })();
 
@@ -125,7 +118,7 @@
         return r.json();
       })
       .then(function (j) {
-        // Guard against a static host's SPA fallback returning index.html with
+        // Guard against an SPA fallback returning index.html with
         // a 200: only an actual Catena health envelope counts as a live base.
         if (!j || j.app !== "catena") throw new Error("not a catena api");
         return base;
@@ -220,14 +213,15 @@
     return C.resolveApi().then(function (base) {
       if (!base) {
         throw new Error(
-          "No Catena API reachable. This build has no /api worker (static host). " +
-          "Deploy the Cloudflare Pages build, or pass ?api=<worker-origin>/api."
+          "No Catena API reachable at same-origin /api. " +
+          "Ensure the Next.js server is running (npm run dev / Vercel deploy) " +
+          "or pass ?api=<origin>/api to point at a live Catena API."
         );
       }
       return run(base)
         .then(function (r) { return handle(r, base); })
         .catch(function (err) {
-          // A base that answered /health but fails a real route (cold worker,
+          // A base that answered /health but fails a real route (cold start,
           // transient 5xx, network drop) must not kill the dashboard: fall back
           // to the in-browser engine once, then retry there.
           if (base !== "local" && C.localEngine) {

@@ -66,22 +66,18 @@ function decodeHeaderText(v: string | null | undefined): string {
 /**
  * Resolves geo from whatever the host actually provides.
  *
- * HOST-AGNOSTIC BY DESIGN — this used to read ONLY `request.cf`, which exists
- * exclusively on Cloudflare. On every other runtime `cf` is `undefined`, so with
- * no explicit ?lat/?lon the function fell straight through to the hard-coded
- * New Delhi default. That made weather/air-quality panels *look* live (the
- * upstream really did answer 200) while describing a city the user was nowhere
- * near — a silent wrong-data bug, worse than a visible failure.
+ * HOST-AGNOSTIC BY DESIGN. Primary target is Next.js on Vercel (or local),
+ * which supplies `x-vercel-ip-*` headers. Explicit browser geolocation
+ * (?lat/?lon from core.js) always wins. Remaining header sources are optional
+ * best-effort fallthroughs so a twin never silently uses a wrong city.
  *
  * Resolution order, most trustworthy first:
- *   1. explicit ?lat/?lon         — the browser Geolocation API, forwarded by
- *                                   core.js; the only source the user consented to
- *   2. `request.cf`               — Cloudflare Workers/Pages
- *   3. `x-vercel-ip-*` headers    — Vercel Edge/Node functions
+ *   1. explicit ?lat/?lon         — browser Geolocation API via core.js
+ *   2. `x-vercel-ip-*` headers    — Vercel serverless / edge
+ *   3. `request.cf`               — optional CF-compatible runtimes (unused here)
  *   4. `x-nf-geo` (base64 JSON)   — Netlify
- *   5. generic CDN headers        — Fastly/Akamai/Cloudflare `cf-ipcity` etc.
- *   6. New Delhi default          — reported as `live: false` so the provenance
- *                                   strip labels it, and never silently trusted
+ *   5. generic CDN headers        — Fastly/Akamai `cf-ipcity` etc.
+ *   6. New Delhi default          — reported as `live: false` in provenance
  */
 export function geoFromRequest(req: Request, fallback?: { lat?: number; lon?: number }): GeoCtx {
   const cf = (req as any).cf || {}
@@ -104,8 +100,8 @@ export function geoFromRequest(req: Request, fallback?: { lat?: number; lon?: nu
     }
   }
 
-  const edgeLat = cf.latitude ?? h('x-vercel-ip-latitude') ?? nf?.latitude
-  const edgeLon = cf.longitude ?? h('x-vercel-ip-longitude') ?? nf?.longitude
+  const edgeLat = h('x-vercel-ip-latitude') || cf.latitude || nf?.latitude
+  const edgeLon = h('x-vercel-ip-longitude') || cf.longitude || nf?.longitude
   const hasEdge = Number.isFinite(Number(edgeLat)) && Number.isFinite(Number(edgeLon))
 
   // An explicit client fix (Geolocation API) always wins over IP inference.

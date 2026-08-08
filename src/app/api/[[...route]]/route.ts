@@ -1,9 +1,11 @@
 /**
  * Next.js App Router catch-all — mounts the Catena/Vaidyam Hono API at /api/*.
  *
- * Same Hono app as the original Cloudflare worker and Vercel edge function.
+ * Runs on the Node.js runtime (Vercel serverless / local `next start`).
  * Secrets come from process.env and are injected into c.env so src/lib/vaidyam
  * stays host-agnostic (reads c.env.GROQ_API_KEY etc.).
+ *
+ * No Cloudflare Workers / Pages / wrangler dependency — pure Next.js + Postgres.
  */
 import { Hono } from "hono";
 import { handle } from "hono/vercel";

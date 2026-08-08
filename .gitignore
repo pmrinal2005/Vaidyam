@@ -1,10 +1,33 @@
+# dependencies
 node_modules
+.pnp
+.pnp.js
+
+# next
 .next
+out
 dist
 dist-static
-.local-engine-build
+
+# env / secrets
 .env
 .env.local
-*.log
+.env.*.local
+.dev.vars
+
+# debug / ide
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 .DS_Store
-.next-types
+.idea
+.vscode
+*.tsbuildinfo
+next-env.d.ts
+
+# drizzle
+drizzle/meta
+
+# cloudflare / wrangler leftovers (not used)
+.wrangler
+.mf
