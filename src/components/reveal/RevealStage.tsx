@@ -102,7 +102,7 @@ export default function RevealStage() {
           <div className="relative flex flex-col items-center justify-center" style={{ width: '100vw', height: '100vh', transform: 'rotate(15deg)' }}>
             <motion.div className="w-[90vw] max-w-[1200px] aspect-square relative z-0">
               <OrbitImages
-                images={orbitImagesData}
+                images={orbitImagesData as string[]}
                 shape="ellipse"
                 direction="normal"
                 duration={40}

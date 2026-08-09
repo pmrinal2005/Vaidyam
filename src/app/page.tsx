@@ -1,12 +1,8 @@
 import Script from "next/script";
+import RevealStage from "@/components/reveal/RevealStage";
 
 export const dynamic = "force-static";
 
-/**
- * SynapseX landing page — ported from Vaidyam public/index.html.
- * Static assets live under /public/static and the reveal island is the
- * prebuilt bundle at /static/reveal/reveal.js (no Mux stream).
- */
 export default function HomePage() {
   return (
     <>
@@ -24,6 +20,7 @@ export default function HomePage() {
       />
       <link rel="stylesheet" href="/static/styles.css" />
       <link rel="stylesheet" href="/static/reveal/reveal.css" />
+      <link rel="stylesheet" href="/static/reveal/index.css" />
 
       {/* Shared SVG symbols */}
       <svg
@@ -257,7 +254,9 @@ export default function HomePage() {
         <h2 id="reveal-heading" className="visually-hidden">
           Master the Elements — 2K26 collection reveal
         </h2>
-        <div id="reveal-root" />
+        <div id="reveal-root" data-mounted="true">
+          <RevealStage />
+        </div>
       </section>
 
       <footer id="main-footer">
@@ -272,7 +271,6 @@ export default function HomePage() {
         strategy="beforeInteractive"
       />
       <Script src="/static/app.js" strategy="afterInteractive" />
-      <Script src="/static/reveal/reveal.js" strategy="afterInteractive" type="module" />
     </>
   );
 }

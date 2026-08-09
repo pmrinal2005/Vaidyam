@@ -1,11 +1,3 @@
-/**
- * Next.js App Router catch-all — mounts the Catena/Vaidyam API at /api/*.
- *
- * Runs on the Node.js runtime (Vercel serverless / local `next start`).
- * Secrets come from process.env. No Cloudflare Workers/Pages, no Hono —
- * this is a plain Next.js Route Handler dispatching to the MiniRouter
- * defined in src/lib/vaidyam/api.ts.
- */
 import type { NextRequest } from "next/server";
 import api from "@/lib/vaidyam/api";
 import { createApiContext } from "@/lib/vaidyam/router";
@@ -36,13 +28,37 @@ function envFromProcess(): Bindings {
   return out as Bindings;
 }
 
+function normalizePath(pathname: string): string {
+  let path = pathname.replace(/^\/api/, "") || "/";
+  path = path.replace(/\/{2,}/g, "/");
+  if (path.length > 1) path = path.replace(/\/+$/, "");
+  if (!path.startsWith("/")) path = `/${path}`;
+  return path || "/";
+}
+
 async function handleRequest(request: NextRequest): Promise<Response> {
-  const url = new URL(request.url);
-  // Strip the /api prefix — the MiniRouter registers routes like "/health".
-  let path = url.pathname.replace(/^\/api/, "");
-  if (!path) path = "/";
-  const ctx = createApiContext<Bindings>(request, envFromProcess());
-  return api.dispatch(request.method, path, ctx);
+  try {
+    const url = new URL(request.url);
+    const path = normalizePath(url.pathname);
+    const ctx = createApiContext<Bindings>(request, envFromProcess());
+    const res = await api.dispatch(request.method, path, ctx);
+    const headers = new Headers(res.headers);
+    headers.set("cache-control", "no-store");
+    headers.set("access-control-allow-origin", "*");
+    return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return Response.json(
+      { ok: false, error: "internal_error", detail: message.slice(0, 300) },
+      {
+        status: 500,
+        headers: {
+          "cache-control": "no-store",
+          "access-control-allow-origin": "*",
+        },
+      },
+    );
+  }
 }
 
 export const GET = handleRequest;
@@ -55,8 +71,10 @@ export async function OPTIONS() {
   return new Response(null, {
     status: 204,
     headers: {
+      "access-control-allow-origin": "*",
       "access-control-allow-methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
       "access-control-allow-headers": "content-type,x-catena-user",
+      "cache-control": "no-store",
     },
   });
 }

@@ -1,8 +1,9 @@
 // @ts-nocheck
 "use client";
 
-import { useMemo, useEffect, useRef, useState } from 'react';
+import { useMemo, useEffect, useRef, useState, type ReactNode } from 'react';
 import { motion, useMotionValue, useTransform, animate, useMotionTemplate } from 'motion/react';
+import './OrbitImages.css';
 
 function generateEllipsePath(cx, cy, rx, ry) {
   return `M ${cx - rx} ${cy} A ${rx} ${ry} 0 1 0 ${cx + rx} ${cy} A ${rx} ${ry} 0 1 0 ${cx - rx} ${cy}`;
@@ -155,7 +156,7 @@ export default function OrbitImages({
   rotationOverride,
   translateXOverride,
   focusStrength,
-}) {
+}: any) {
   const containerRef = useRef(null);
   const [scale, setScale] = useState(1);
 

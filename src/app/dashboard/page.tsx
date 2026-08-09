@@ -16,7 +16,7 @@ export const viewport: Viewport = {
 
 /**
  * Catena dashboard shell — ported from Vaidyam public/dashboard.html.
- * All panels talk to same-origin /api/* (Hono app mounted in Next.js).
+ * All panels talk to same-origin /api/* (Next.js route handlers).
  */
 export default function DashboardPage() {
   return (
@@ -39,7 +39,7 @@ export default function DashboardPage() {
       <link rel="preconnect" href="https://api.fda.gov" crossOrigin="anonymous" />
       <link rel="preconnect" href="https://disease.sh" crossOrigin="anonymous" />
       <link rel="preconnect" href="https://www.ebi.ac.uk" crossOrigin="anonymous" />
-      <meta name="catena-api-base" content="" />
+      <meta name="catena-api-base" content="/api" />
 
       <a className="dash-skip" href="#dash-main">
         Skip to dashboard content
