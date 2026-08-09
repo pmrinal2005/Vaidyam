@@ -28,6 +28,38 @@ npm run dev
 
 Open http://localhost:3000 and http://localhost:3000/dashboard.
 
+## Fixing the "dist-static" / Output Directory Vercel error
+
+If a Vercel deployment ever fails with:
+
+```
+Error: The Next.js output directory "dist-static" was not found at
+"/vercel/path0/dist-static".
+```
+
+it means the **Vercel Project → Settings → Build & Development Settings →
+Output Directory** field has a leftover manual override (from an earlier,
+now-removed static/Cloudflare-style build of this project) pointing at
+`dist-static`. This repo no longer produces that directory at all — `next
+build` always writes to `.next/`, and there is no `build:static` /
+`dist-static` script in `package.json` or `scripts/` any more.
+
+Two independent fixes are in place so this cannot recur:
+
+1. `vercel.json` now sets `"outputDirectory": ".next"` explicitly. Per
+   Vercel's own precedence rules, an `outputDirectory` in `vercel.json`
+   **overrides** whatever is configured in the dashboard, so a stale manual
+   override in Project Settings can no longer break the build.
+2. All legacy static-export tooling (`scripts/build-static.mjs`,
+   `scripts/build-reveal.mjs`, `scripts/build-local-engine.mjs`,
+   `scripts/serve-static.mjs`) has been removed — there is nothing left in the
+   repo that can produce or reference a `dist-static/` artifact.
+
+If you still see the error after redeploying, open the Vercel dashboard for
+the project, go to **Settings → Build and Deployment**, and make sure
+"Output Directory" is **not overridden** (toggle it off) so it defers to
+`vercel.json`/the Next.js framework preset, then redeploy.
+
 ## Deploy on Vercel (free tier)
 
 1. Import this repo into Vercel — Framework Preset: **Next.js** (auto).

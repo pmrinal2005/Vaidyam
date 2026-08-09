@@ -3,6 +3,7 @@
   "framework": "nextjs",
   "buildCommand": "next build",
   "installCommand": "npm install",
+  "outputDirectory": ".next",
   "headers": [
     {
       "source": "/static/(.*)",
@@ -34,9 +35,5 @@
         { "key": "X-Frame-Options", "value": "SAMEORIGIN" }
       ]
     }
-  ],
-  "rewrites": [
-    { "source": "/dashboard.html", "destination": "/dashboard" },
-    { "source": "/index.html", "destination": "/" }
   ]
 }

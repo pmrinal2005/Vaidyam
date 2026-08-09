@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Link from "next/link";
 import Script from "next/script";
 
 export const dynamic = "force-dynamic";
@@ -48,9 +49,9 @@ export default function DashboardPage() {
 
       <div id="dash-shell" className="dash-shell">
         <aside id="dash-rail" className="dash-rail" aria-label="Dashboard sections">
-          <a className="rail-logo" href="/" aria-label="Back to SynapseX landing page">
+          <Link className="rail-logo" href="/" aria-label="Back to SynapseX landing page">
             <span className="rail-logo-mark" aria-hidden="true" />
-          </a>
+          </Link>
           <nav id="rail-nav" className="rail-nav" aria-label="Views" />
           <div className="rail-foot">
             <button
@@ -62,14 +63,14 @@ export default function DashboardPage() {
             >
               <i className="bi bi-arrow-repeat" aria-hidden="true" />
             </button>
-            <a
+            <Link
               className="rail-btn"
               href="/"
               aria-label="Exit dashboard"
               title="Exit to landing page"
             >
               <i className="bi bi-box-arrow-left" aria-hidden="true" />
-            </a>
+            </Link>
           </div>
         </aside>
 
