@@ -4,6 +4,167 @@
 
   var C = (window.Catena = window.Catena || {});
 
+  /* ══════════════════════════════════════════════════════════════════════
+     THEME RUNTIME
+     ----------------------------------------------------------------------
+     Why this exists (root cause of the invisible-text bug):
+
+     The previous build painted its dark surface from `.dash-body`, a class the
+     App Router's shared layout never applied, while the *text* tokens were
+     global. Result: near-white --ink-2/3/4 on the UA-default white body →
+     ~1.04:1 contrast → invisible labels, notes, subheads and rail icons.
+
+     The theme is therefore anchored on <html data-theme>, which:
+       • cannot be lost by a body-class regression,
+       • is set pre-paint by an inline boot script (no FOUC),
+       • is the single source of truth for BOTH CSS and SVG-attribute colours.
+
+     Charts write colours into SVG attributes, which CSS cannot restyle. They
+     read `C.theme.palette()` instead — a cached snapshot of the very same
+     custom properties, refreshed on every theme change.
+     ══════════════════════════════════════════════════════════════════════ */
+  var THEME_KEY = "catena-theme";
+  var PALETTE_VARS = [
+    "ink", "ink-2", "ink-3", "ink-4", "ink-graph",
+    "accent", "accent-2", "violet", "amber", "rose", "cyan", "orange", "slate",
+    "on-accent", "bg", "bg-elev", "panel", "panel-2", "stroke", "stroke-2",
+    "chart-grid", "chart-grid-2", "chart-axis", "chart-axis-dim", "chart-zero",
+    "chart-dot-stroke", "chart-edge-idle", "chart-edge-active", "chart-arrow",
+    "s-mint", "s-blue", "s-violet", "s-amber", "s-rose", "s-cyan", "s-orange", "s-slate"
+  ];
+
+  var themeListeners = [];
+  var paletteCache = null;
+
+  C.theme = {
+    /** Current theme name — always "dark" or "light". */
+    get: function () {
+      var t = document.documentElement.getAttribute("data-theme");
+      return t === "light" ? "light" : "dark";
+    },
+
+    /** Stored preference, or null when the visitor never chose one. */
+    stored: function () {
+      try { var v = localStorage.getItem(THEME_KEY); return v === "light" || v === "dark" ? v : null; }
+      catch (e) { return null; }
+    },
+
+    /** Applies a theme, persists it, refreshes the palette, notifies views. */
+    set: function (name, opts) {
+      var next = name === "light" ? "light" : "dark";
+      var o = opts || {};
+      var root = document.documentElement;
+      if (root.getAttribute("data-theme") !== next) root.setAttribute("data-theme", next);
+      root.style.colorScheme = next;
+      if (o.persist !== false) {
+        try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+      }
+      paletteCache = null;
+      C.theme.syncMeta();
+      C.theme.syncToggle();
+      if (o.silent) return next;
+      themeListeners.forEach(function (fn) { try { fn(next); } catch (e) {} });
+      return next;
+    },
+
+    toggle: function () {
+      return C.theme.set(C.theme.get() === "dark" ? "light" : "dark");
+    },
+
+    /** Registers a callback fired after every (non-silent) theme change. */
+    onChange: function (fn) { if (typeof fn === "function") themeListeners.push(fn); },
+
+    /** Keeps <meta name="theme-color"> (mobile browser chrome) in step. */
+    syncMeta: function () {
+      var el = document.querySelector('meta[name="theme-color"]');
+      if (!el) {
+        el = document.createElement("meta");
+        el.setAttribute("name", "theme-color");
+        document.head.appendChild(el);
+      }
+      el.setAttribute("content", C.theme.get() === "light" ? "#eef2f8" : "#07080a");
+    },
+
+    /** Reflects state onto the toggle button (a11y + tooltip text). */
+    syncToggle: function () {
+      var btn = document.getElementById("theme-toggle");
+      if (!btn) return;
+      var dark = C.theme.get() === "dark";
+      var label = dark ? "Switch to light theme" : "Switch to dark theme";
+      btn.setAttribute("aria-label", label);
+      btn.setAttribute("title", label);
+      btn.setAttribute("aria-pressed", dark ? "false" : "true");
+      var live = document.getElementById("theme-toggle-label");
+      if (live) live.textContent = (dark ? "Dark" : "Light") + " theme active";
+    },
+
+    /**
+     * Resolved colour snapshot for SVG-attribute use. Cached because
+     * getComputedStyle is not free and charts read it dozens of times
+     * per render.
+     */
+    palette: function () {
+      if (paletteCache) return paletteCache;
+      var cs = getComputedStyle(document.documentElement);
+      var p = { name: C.theme.get() };
+      PALETTE_VARS.forEach(function (k) {
+        var v = cs.getPropertyValue("--" + k);
+        p[k] = (v || "").trim();
+      });
+      /* Defensive fallbacks: if a stylesheet has not applied yet (rare, but a
+         cold cache on a slow connection can do it) we must never hand a chart
+         an empty string, which SVG treats as `black` — reintroducing an
+         unreadable state. */
+      var dark = p.name === "dark";
+      function fb(key, d, l) { if (!p[key]) p[key] = dark ? d : l; }
+      fb("ink", "#f4f6f8", "#0c1118");
+      fb("ink-2", "rgba(244,246,248,0.78)", "#38424f");
+      fb("ink-3", "rgba(244,246,248,0.62)", "#4f5b6d");
+      fb("ink-4", "rgba(244,246,248,0.5)", "#5e6a7d");
+      fb("ink-graph", "rgba(244,246,248,0.82)", "#1b2531");
+      fb("chart-grid", "rgba(255,255,255,0.055)", "rgba(12,17,24,0.1)");
+      fb("chart-grid-2", "rgba(255,255,255,0.09)", "rgba(12,17,24,0.16)");
+      fb("chart-axis", "rgba(244,246,248,0.62)", "#4f5b6d");
+      fb("chart-axis-dim", "rgba(244,246,248,0.5)", "#5e6a7d");
+      fb("chart-zero", "rgba(255,255,255,0.22)", "rgba(12,17,24,0.3)");
+      fb("chart-dot-stroke", "#07080a", "#ffffff");
+      fb("chart-edge-idle", "rgba(255,255,255,0.12)", "rgba(12,17,24,0.16)");
+      fb("chart-edge-active", "rgba(121,184,255,0.62)", "rgba(18,87,184,0.6)");
+      fb("chart-arrow", "rgba(244,246,248,0.5)", "rgba(12,17,24,0.5)");
+      fb("s-mint", "#7cf5c4", "#0e9b73");
+      fb("s-blue", "#79b8ff", "#1f6fe0");
+      fb("s-violet", "#b79dff", "#7b4fe0");
+      fb("s-amber", "#ffcf7a", "#b8791a");
+      fb("s-rose", "#ff8fa3", "#d93b5c");
+      fb("s-cyan", "#6ee7f5", "#0a90ad");
+      fb("s-orange", "#ff9f6e", "#cc5f21");
+      fb("s-slate", "#9aa4b2", "#5c6879");
+      fb("accent", "#7cf5c4", "#0b6f50");
+      fb("accent-2", "#79b8ff", "#1257b8");
+      fb("bg", "#07080a", "#eef2f8");
+      paletteCache = p;
+      return p;
+    },
+
+    /** Invalidates the palette cache (used after a stylesheet swap/reload). */
+    invalidate: function () { paletteCache = null; }
+  };
+
+  /**
+   * Semantic series colours. Views ask for a NAME, never a hex, so a series
+   * automatically re-tints when the theme flips. `C.hue()` is the single
+   * lookup used by every view and by DOMAIN_COLOR below.
+   */
+  C.HUE_KEYS = {
+    mint: "s-mint", blue: "s-blue", violet: "s-violet", amber: "s-amber",
+    rose: "s-rose", cyan: "s-cyan", orange: "s-orange", slate: "s-slate"
+  };
+  C.hue = function (name) {
+    var p = C.theme.palette();
+    var key = C.HUE_KEYS[name];
+    return (key && p[key]) || p["s-mint"];
+  };
+
   C.state = {
     view: "overview",
     uid: null,
@@ -331,15 +492,31 @@
   };
   C.riskTone = function (score) { return score < 34 ? "good" : score < 62 ? "warn" : "bad"; };
 
-  C.DOMAIN_COLOR = {
-    medication: "#7cf5c4",
-    sleep: "#79b8ff",
-    environment: "#6ee7f5",
-    mental: "#b79dff",
-    nutrition: "#ffcf7a",
-    vital: "#ff8fa3",
-    finance: "#9aa4b2",
-    symptom: "#ff9f6e"
+  /**
+   * Domain → semantic hue name (NOT a hex). `C.domainColor()` resolves it
+   * through the live palette, so graph nodes, agent dots and legends all
+   * re-tint on a theme flip instead of staying stuck on the dark-theme hexes
+   * that used to be baked in here.
+   */
+  C.DOMAIN_HUE = {
+    medication: "mint",
+    sleep: "blue",
+    environment: "cyan",
+    mental: "violet",
+    nutrition: "amber",
+    vital: "rose",
+    finance: "slate",
+    symptom: "orange"
+  };
+  C.DOMAIN_KEYS = Object.keys(C.DOMAIN_HUE);
+  C.domainColor = function (domain) { return C.hue(C.DOMAIN_HUE[domain] || "slate"); };
+
+  /* Back-compat: some call sites index C.DOMAIN_COLOR[domain] directly. A
+     Proxy is not available in every target browser, so this is rebuilt from
+     the palette on each theme change (see the onChange hook at the bottom). */
+  C.DOMAIN_COLOR = {};
+  C.refreshDomainColors = function () {
+    C.DOMAIN_KEYS.forEach(function (k) { C.DOMAIN_COLOR[k] = C.domainColor(k); });
   };
 
   C.deltaHtml = function (d, invert) {
@@ -449,4 +626,138 @@
     var p = Math.max(0, Math.min(100, Number(pct) || 0));
     return '<div class="bar-track"><div class="bar-fill ' + (cls || "") + '" style="width:' + p + '%"></div></div>';
   };
+
+  /* ══════════════════════════════════════════════════════════════════════
+     TOOLTIP ENGINE
+     ----------------------------------------------------------------------
+     One floating element per positioned container, reused across hovers, so
+     hundreds of chart points cost a single node. Shared by:
+       • chart hover (crosshair readouts, bars, heat cells, scatter, donut)
+       • metric cards (.kpi[data-tip]) and stat cells (.stat-cell[data-tip])
+     Content is built from structured rows so units and timestamps are always
+     rendered in the same place regardless of the caller.
+     ══════════════════════════════════════════════════════════════════════ */
+  C.tip = (function () {
+    function ensure(host) {
+      var el = host.querySelector(":scope > .chart-tip");
+      if (!el) {
+        el = document.createElement("div");
+        el.className = "chart-tip";
+        host.appendChild(el);
+      }
+      return el;
+    }
+
+    /**
+     * @param {Object} m  { title, rows:[{name,value,unit,color}], foot }
+     */
+    function html(m) {
+      var out = "";
+      if (m.title) out += '<p class="chart-tip-title">' + C.esc(m.title) + "</p>";
+      (m.rows || []).forEach(function (r) {
+        out += '<div class="chart-tip-row">' +
+          (r.color ? '<span class="sw" style="background:' + C.esc(r.color) + '"></span>' : "") +
+          '<span class="nm">' + C.esc(r.name) + "</span>" +
+          '<span class="vl">' + C.esc(r.value) + "</span>" +
+          (r.unit ? '<span class="un">' + C.esc(r.unit) + "</span>" : "") +
+          "</div>";
+      });
+      if (m.foot) out += '<div class="chart-tip-foot">' + C.esc(m.foot) + "</div>";
+      return out;
+    }
+
+    return {
+      /**
+       * Shows the tooltip for `host` at host-relative (x, y).
+       * Clamped horizontally and flipped vertically so it can never be
+       * clipped by the card (`.card` is overflow:hidden).
+       */
+      show: function (host, model, x, y) {
+        if (!host) return;
+        var el = ensure(host);
+        el.innerHTML = html(model || {});
+        el.classList.add("is-on");
+
+        var hw = host.clientWidth || 1;
+        var tw = el.offsetWidth || 0;
+        var th = el.offsetHeight || 0;
+        var half = tw / 2 + 6;
+        var cx = hw > tw + 12 ? Math.max(half, Math.min(hw - half, x)) : hw / 2;
+
+        /* Above the cursor by default; below when there is not enough room. */
+        var above = y - th - 12 >= -2;
+        var top = above ? y - th - 10 : y + 16;
+        top = Math.max(2, Math.min(Math.max(2, (host.clientHeight || th) - th - 2), top));
+
+        el.style.left = cx + "px";
+        el.style.top = top + "px";
+        el.style.transform = "translateX(-50%)";
+      },
+      hide: function (host) {
+        if (!host) return;
+        var el = host.querySelector(":scope > .chart-tip");
+        if (el) el.classList.remove("is-on");
+      },
+      hideAll: function () {
+        C.$$(".chart-tip.is-on").forEach(function (el) { el.classList.remove("is-on"); });
+      },
+      /** Nearest positioned container that should own the floating element. */
+      host: function (el) {
+        return (el.closest && (el.closest(".tip-host") || el.closest(".chart-wrap") || el.closest(".card"))) || el;
+      }
+    };
+  })();
+
+  /**
+   * Wires `[data-tip]` elements (metric cards, stat cells) to the tooltip.
+   * The payload is a JSON blob on the attribute so the markup stays a pure
+   * string — views never need imperative code for this.
+   *
+   * Idempotent: safe to call after every render.
+   */
+  C.bindTips = function (root) {
+    C.$$("[data-tip]", root || document).forEach(function (el) {
+      if (el._tipBound) return;
+      el._tipBound = true;
+
+      var host = el;                      /* tooltip is appended to the element itself */
+      if (getComputedStyle(host).position === "static") host.style.position = "relative";
+
+      function model() {
+        try { return JSON.parse(el.getAttribute("data-tip") || "{}"); }
+        catch (e) { return { title: el.getAttribute("data-tip") || "" }; }
+      }
+      function show(ev) {
+        el.classList.add("is-hot");
+        var box = el.getBoundingClientRect();
+        var x = ev && ev.clientX ? ev.clientX - box.left : box.width / 2;
+        C.tip.show(host, model(), x, 4);
+      }
+      function hide() {
+        el.classList.remove("is-hot");
+        C.tip.hide(host);
+      }
+      el.addEventListener("mouseenter", show);
+      el.addEventListener("mousemove", show);
+      el.addEventListener("mouseleave", hide);
+      el.addEventListener("focus", show);
+      el.addEventListener("blur", hide);
+      /* Touch: tap toggles, and any other tap dismisses. */
+      el.addEventListener("click", function (ev) {
+        if (window.matchMedia && window.matchMedia("(hover: hover)").matches) return;
+        var on = host.querySelector(":scope > .chart-tip.is-on");
+        C.tip.hideAll();
+        if (!on) show(ev);
+      });
+      if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "0");
+    });
+  };
+
+  /* Keep the back-compat DOMAIN_COLOR map and the palette in step. */
+  C.refreshDomainColors();
+  C.theme.onChange(function () {
+    C.refreshDomainColors();
+    C.tip.hideAll();
+  });
+  C.theme.syncMeta();
 })();
