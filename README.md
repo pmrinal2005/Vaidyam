@@ -3,12 +3,9 @@
 Full-stack **Next.js (App Router)** app with **PostgreSQL via Drizzle**.  
 Deploy on the **Vercel free tier**; use local Postgres or **Supabase free tier** for the database.
 
-## Why dashboard 404s happened (and why this repo fixes them)
+## Why the dashboard showed “Could not load live data”
 
-The previous Vercel deployment served a **static** `dashboard.html` from `public/` / `dist-static` with **no serverless `/api/*` functions**.  
-The dashboard client calls same-origin `/api/overview`, `/api/graph`, … — those returned **HTTP 404**, so every panel showed:
-
-> Could not load live data. HTTP 404 on /overview
+The broken production deployment at `vaidyam-seven.vercel.app` was serving a **static** site (no serverless `/api/*` functions). The dashboard client calls same-origin `/api/overview`, `/api/graph`, … — those returned **HTTP 404**, so every panel failed.
 
 This codebase is a **pure Next.js** app:
 
@@ -18,7 +15,40 @@ This codebase is a **pure Next.js** app:
 - Explicit routes for each panel **plus** a catch-all, so Vercel cannot miss `/api/*`
 - No Cloudflare Workers, no Hono, no `outputDirectory: dist-static`, no static HTML shadowing routes
 
-## Quick start
+## Fixing the Vercel `dist-static` build error
+
+```
+Error: The Next.js output directory "dist-static" was not found at
+"/vercel/path0/dist-static".
+```
+
+**Root cause:** the Vercel project (or an old `vercel.json`) still points **Output Directory** at `dist-static` from a previous static/Cloudflare-style build. Next.js does **not** produce that folder — `next build` writes to `.next/`, and the Vercel Next.js builder consumes it internally.
+
+### Required Vercel project settings
+
+1. **Framework Preset:** `Next.js`
+2. **Build Command:** `next build` (or leave default)
+3. **Output Directory:** **LEAVE EMPTY / toggle override OFF**  
+   Do **not** set `.next`, `dist`, `dist-static`, or `out`.
+4. **Install Command:** `npm install`
+5. **Root Directory:** repository root (where `package.json` + `next.config.ts` live)
+
+This repo’s `vercel.json`:
+
+- sets `"framework": "nextjs"`
+- sets `"buildCommand": "next build"`
+- does **NOT** set `outputDirectory` (setting it breaks the Next.js builder)
+
+Also removed: `scripts/build-static.mjs`, `serve-static.mjs`, and any path that could recreate `dist-static/`.
+
+After changing settings: **Redeploy** (Deployments → … → Redeploy, or push a new commit).  
+Then verify:
+
+- `GET https://<your-app>.vercel.app/api/health` → `{ "ok": true, "app": "catena", "host": "nextjs", ... }`
+- `GET https://<your-app>.vercel.app/api/overview` → envelope with `data.kpis`
+- `/dashboard` loads live panels (no “static host” error)
+
+## Quick start (local)
 
 ```bash
 npm install
@@ -28,53 +58,16 @@ npm run dev
 
 Open http://localhost:3000 and http://localhost:3000/dashboard.
 
-## Fixing the "dist-static" / Output Directory Vercel error
+## Environment variables
 
-If a Vercel deployment ever fails with:
+| Name | Required | Purpose |
+|------|----------|---------|
+| `DATABASE_URL` | recommended | Postgres (Supabase session pooler works) |
+| `USDA_API_KEY` | optional | richer nutrition |
+| `GROQ_API_KEY` / `OPENROUTER_API_KEY` / `NVIDIA_NIM_API_KEY` | optional | LLM swarm providers |
+| `SUPABASE_URL` + keys | optional | alternate persistence |
 
-```
-Error: The Next.js output directory "dist-static" was not found at
-"/vercel/path0/dist-static".
-```
-
-it means the **Vercel Project → Settings → Build & Development Settings →
-Output Directory** field has a leftover manual override (from an earlier,
-now-removed static/Cloudflare-style build of this project) pointing at
-`dist-static`. This repo no longer produces that directory at all — `next
-build` always writes to `.next/`, and there is no `build:static` /
-`dist-static` script in `package.json` or `scripts/` any more.
-
-Two independent fixes are in place so this cannot recur:
-
-1. `vercel.json` now sets `"outputDirectory": ".next"` explicitly. Per
-   Vercel's own precedence rules, an `outputDirectory` in `vercel.json`
-   **overrides** whatever is configured in the dashboard, so a stale manual
-   override in Project Settings can no longer break the build.
-2. All legacy static-export tooling (`scripts/build-static.mjs`,
-   `scripts/build-reveal.mjs`, `scripts/build-local-engine.mjs`,
-   `scripts/serve-static.mjs`) has been removed — there is nothing left in the
-   repo that can produce or reference a `dist-static/` artifact.
-
-If you still see the error after redeploying, open the Vercel dashboard for
-the project, go to **Settings → Build and Deployment**, and make sure
-"Output Directory" is **not overridden** (toggle it off) so it defers to
-`vercel.json`/the Next.js framework preset, then redeploy.
-
-## Deploy on Vercel (free tier)
-
-1. Import this repo into Vercel — Framework Preset: **Next.js** (auto).
-2. **Do not** set a custom Output Directory. Leave Build Command as `next build` (see `vercel.json`).
-3. Environment variables:
-   - `DATABASE_URL` — Postgres URI (optional but recommended; Supabase session pooler works)
-   - Optional: `USDA_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `NVIDIA_NIM_API_KEY`, `SUPABASE_*`, etc. (see `.env.example`)
-4. Push schema once against the remote DB:
-   ```bash
-   DATABASE_URL="<uri>" npx drizzle-kit push
-   ```
-5. Deploy, then verify:
-   - `GET /api/health` → `{ "ok": true, "app": "catena", "host": "nextjs", ... }`
-   - `GET /api/overview` → `{ "ok": true, "data": { "kpis": [...] }, "provenance": [...] }`
-   - `/dashboard` loads live panels (no 404s)
+Without `DATABASE_URL` the app still runs — twin math + live free upstreams power every panel; DB is best-effort.
 
 ## API surface (all dynamic)
 
@@ -119,6 +112,7 @@ public/static/dash/*.js          Dashboard client (calls /api/*)
 npx next typegen
 npx tsc --noEmit
 npm run build
-curl -s localhost:3000/api/health
-curl -s localhost:3000/api/overview | head
+node scripts/verify.mjs --no-api
+# with server up:
+BASE=http://127.0.0.1:3000 node scripts/verify.mjs
 ```

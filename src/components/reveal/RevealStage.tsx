@@ -68,7 +68,7 @@ export default function RevealStage() {
   const orbitProgress = useMotionValue(0);
   const prevScroll = useRef(0);
 
-  useAnimationFrame((time, delta) => {
+  useAnimationFrame((_time: number, delta: number) => {
      const pos = scrollYProgress.get();
      const scrollDelta = pos - prevScroll.current;
      prevScroll.current = pos;

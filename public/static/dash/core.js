@@ -141,10 +141,10 @@
       var bases = C.API_BASES.slice();
       function next() {
         if (!bases.length) {
-          // No reachable worker anywhere → run the API in this browser.
+          // No reachable /api yet — try same-origin proxy stub (Next.js host).
           if (C.localEngine) {
             C.apiBase = "local";
-            C.setLive("degraded", "local engine");
+            C.setLive("degraded", "local proxy");
             return Promise.resolve("local");
           }
           C.apiBase = null;
@@ -219,8 +219,9 @@
       if (!base) {
         throw new Error(
           "No Catena API reachable at same-origin /api. " +
-          "Ensure the Next.js server is running (npm run dev / Vercel deploy) " +
-          "or pass ?api=<origin>/api to point at a live Catena API."
+          "This app must be deployed as Next.js (not a static host). " +
+          "On Vercel: Framework Preset = Next.js, Output Directory EMPTY, " +
+          "Build Command = next build. Or pass ?api=<origin>/api."
         );
       }
       return run(base)
