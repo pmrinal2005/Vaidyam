@@ -5,10 +5,21 @@
   var V = (C.views = C.views || {});
   var Ch = C.chart;
 
+  /**
+   * AQI heat-scale colour. `t` is the normalised cell intensity 0..1 used by
+   * Ch.heat; optional absolute AQI `v` picks the band when provided.
+   * Previously dead code — the heat() call inlined a one-off scale. Wired now.
+   */
   function aqiColor(t, v) {
-    var val = v === undefined ? t * 200 : v;
-    var c = val <= 50 ? "110,231,245" : val <= 100 ? "255,207,122" : val <= 150 ? "255,159,110" : val <= 200 ? "255,143,163" : "183,157,255";
-    return "rgba(" + c + "," + (0.2 + Math.min(1, t) * 0.72).toFixed(2) + ")";
+    var val = v === undefined || v === null ? (Number(t) || 0) * 200 : Number(v);
+    var c;
+    if (val <= 50) c = "110,231,245";       /* good — cyan */
+    else if (val <= 100) c = "255,207,122";  /* moderate — amber */
+    else if (val <= 150) c = "255,159,110";  /* unhealthy SG — orange */
+    else if (val <= 200) c = "255,143,163";  /* unhealthy — rose */
+    else c = "183,157,255";                 /* very unhealthy — violet */
+    var a = (0.18 + Math.min(1, Math.max(0, Number(t) || 0)) * 0.72).toFixed(2);
+    return "rgba(" + c + "," + a + ")";
   }
 
   /* ══════════════════ ENVIRONMENT ══════════════════ */
@@ -37,27 +48,27 @@
 
       out += '<div class="bento">';
 
-      out += '<div class="c12">' + C.card({
+      out += '<div class="c12" style="--i:0">' + C.card({
         title: "Current exposure envelope",
         note: "pollutants + meteorology that drive the twin's symptom edges",
         icon: "bi-thermometer-half",
         body: '<div class="stat-strip">' +
-          C.statCell("US AQI", C.fmt.num(cur.aqi, 0)) +
-          C.statCell("PM2.5", C.fmt.num(cur.pm25, 1), "µg/m³") +
-          C.statCell("PM10", C.fmt.num(cur.pm10, 1), "µg/m³") +
-          C.statCell("Ozone", C.fmt.num(cur.ozone, 0), "µg/m³") +
-          C.statCell("NO₂", C.fmt.num(cur.no2, 1), "µg/m³") +
-          C.statCell("SO₂", C.fmt.num(cur.so2, 1), "µg/m³") +
-          C.statCell("CO", C.fmt.num(cur.co, 0), "µg/m³") +
-          C.statCell("Pollen", C.fmt.num(cur.pollen, 0)) +
-          C.statCell("Temp", C.fmt.num(cur.temperature, 1), "°C") +
-          C.statCell("Humidity", C.fmt.num(cur.humidity, 0), "%") +
-          C.statCell("Pressure", C.fmt.num(cur.pressure, 0), "hPa") +
-          C.statCell("UV index", C.fmt.num(cur.uv, 1)) +
+          C.statCell("US AQI", C.fmt.num(cur.aqi, 0), "", C.tipModel("US AQI", [{ name: "AQI", value: C.fmt.num(cur.aqi, 0), color: C.hue("cyan") }, { name: "Band", value: String(cur.band || "—") }], "Open-Meteo")) +
+          C.statCell("PM2.5", C.fmt.num(cur.pm25, 1), "µg/m³", true) +
+          C.statCell("PM10", C.fmt.num(cur.pm10, 1), "µg/m³", true) +
+          C.statCell("Ozone", C.fmt.num(cur.ozone, 0), "µg/m³", true) +
+          C.statCell("NO₂", C.fmt.num(cur.no2, 1), "µg/m³", true) +
+          C.statCell("SO₂", C.fmt.num(cur.so2, 1), "µg/m³", true) +
+          C.statCell("CO", C.fmt.num(cur.co, 0), "µg/m³", true) +
+          C.statCell("Pollen", C.fmt.num(cur.pollen, 0), "", true) +
+          C.statCell("Temp", C.fmt.num(cur.temperature, 1), "°C", true) +
+          C.statCell("Humidity", C.fmt.num(cur.humidity, 0), "%", true) +
+          C.statCell("Pressure", C.fmt.num(cur.pressure, 0), "hPa", true) +
+          C.statCell("UV index", C.fmt.num(cur.uv, 1), "", true) +
           "</div>"
       }) + "</div>";
 
-      out += '<div class="c8">' + C.card({
+      out += '<div class="c8" style="--i:1">' + C.card({
         title: "PM2.5 & AQI — 72h window",
         note: "past 24h measured + 48h forecast, hourly resolution",
         icon: "bi-graph-up",
@@ -67,32 +78,32 @@
           xTicks: 8,
           rightAxis: true,
           series: [
-            { name: "PM2.5 (µg/m³)", color: "#6ee7f5", values: hourly.map(function (h) { return h.pm25; }) },
-            { name: "US AQI", color: "#ffcf7a", values: hourly.map(function (h) { return h.aqi; }), area: false },
-            { name: "Temp (°C)", color: "#ff9f6e", values: hourly.map(function (h) { return h.temperature; }), axis: "right", area: false, dashed: true }
+            { name: "PM2.5 (µg/m³)", color: C.hue("cyan"), values: hourly.map(function (h) { return h.pm25; }) },
+            { name: "US AQI", color: C.hue("amber"), values: hourly.map(function (h) { return h.aqi; }), area: false },
+            { name: "Temp (°C)", color: C.hue("orange"), values: hourly.map(function (h) { return h.temperature; }), axis: "right", area: false, dashed: true }
           ],
           bands: [{ from: 35, to: 500, color: "rgba(255,143,163,0.06)" }],
           aria: "PM2.5, AQI and temperature over 72 hours"
         })
       }) + "</div>";
 
-      out += '<div class="c4">' + C.card({
+      out += '<div class="c4" style="--i:2">' + C.card({
         title: "Exposure → symptom coupling",
         note: "measured on this twin, not a population average",
         icon: "bi-link-45deg",
         body:
           '<div class="stat-strip">' +
-          C.statCell("PM2.5 → symptom", C.fmt.num(d.correlation.pm25ToSymptom, 2), "r") +
-          C.statCell("PM2.5 → SpO₂", C.fmt.num(d.correlation.pm25ToSpo2, 2), "r") +
-          C.statCell("PM2.5 → steps", C.fmt.num(d.correlation.pm25ToSteps, 2), "r") +
-          C.statCell("Edge strength", C.fmt.num(d.correlation.edgeStrength, 3)) +
+          C.statCell("PM2.5 → symptom", C.fmt.num(d.correlation.pm25ToSymptom, 2), "r", true) +
+          C.statCell("PM2.5 → SpO₂", C.fmt.num(d.correlation.pm25ToSpo2, 2), "r", true) +
+          C.statCell("PM2.5 → steps", C.fmt.num(d.correlation.pm25ToSteps, 2), "r", true) +
+          C.statCell("Edge strength", C.fmt.num(d.correlation.edgeStrength, 3), "", true) +
           "</div>" +
           '<p class="card-note mt12">Causal lag <b class="mono" style="color:var(--accent)">' + C.fmt.num(d.correlation.lagHours, 0) +
           "h</b> — the interval between an exposure spike and symptom expression in this individual. Forecast risk below uses this edge, so the warning arrives before the flare.</p>" +
-          '<div class="mt12">' + Ch.gauge(Math.abs(d.correlation.pm25ToSymptom) * 100, { sub: "COUPLING", color: "#6ee7f5" }) + "</div>"
+          '<div class="mt12">' + Ch.gauge(Math.abs(d.correlation.pm25ToSymptom) * 100, { sub: "COUPLING", color: C.hue("cyan") }) + "</div>"
       }) + "</div>";
 
-      out += '<div class="c12">' + C.card({
+      out += '<div class="c12" style="--i:3">' + C.card({
         title: "48-hour forecast symptom risk",
         note: "forecast PM2.5 × this twin's exposure edge → projected respiratory symptom load",
         icon: "bi-calendar-week",
@@ -101,36 +112,36 @@
             return { label: String(f.hour).slice(5, 16) + " · PM2.5 " + C.fmt.num(f.pm25, 1), value: f.symptomRisk, tick: String(f.hour).slice(11, 13) + "h" };
           }),
           cellH: 40,
-          scale: function (t) { return "rgba(" + (t > 0.66 ? "255,143,163" : t > 0.33 ? "255,207,122" : "110,231,245") + "," + (0.18 + t * 0.72).toFixed(2) + ")"; },
+          scale: function (t) { return aqiColor(t); },
           aria: "Forecast symptom risk by hour"
         }) +
           '<div class="mt12">' + Ch.line({
             labels: (d.forecastRisk || []).map(function (f) { return String(f.hour).slice(11, 16); }),
             height: 190, xTicks: 8,
             series: [
-              { name: "Forecast PM2.5", color: "#6ee7f5", values: (d.forecastRisk || []).map(function (f) { return f.pm25; }) },
-              { name: "Projected symptom load (/10)", color: "#ff8fa3", values: (d.forecastRisk || []).map(function (f) { return f.symptomRisk; }), axis: "right", area: false }
+              { name: "Forecast PM2.5", color: C.hue("cyan"), values: (d.forecastRisk || []).map(function (f) { return f.pm25; }) },
+              { name: "Projected symptom load (/10)", color: C.hue("rose"), values: (d.forecastRisk || []).map(function (f) { return f.symptomRisk; }), axis: "right", area: false }
             ],
             rightAxis: true,
             aria: "Forecast PM2.5 and projected symptom load"
           }) + "</div>"
       }) + "</div>";
 
-      out += '<div class="c6">' + C.card({
+      out += '<div class="c6" style="--i:4">' + C.card({
         title: "Meteorological pressure & humidity",
         note: "barometric shifts couple to migraine / joint symptom edges",
         icon: "bi-speedometer",
         body: Ch.line({
           labels: hLabels, height: 214, xTicks: 6, rightAxis: true,
           series: [
-            { name: "Pressure (hPa)", color: "#b79dff", values: hourly.map(function (h) { return h.pressure; }) },
-            { name: "Humidity (%)", color: "#79b8ff", values: hourly.map(function (h) { return h.humidity; }), axis: "right", area: false, dashed: true }
+            { name: "Pressure (hPa)", color: C.hue("violet"), values: hourly.map(function (h) { return h.pressure; }) },
+            { name: "Humidity (%)", color: C.hue("blue"), values: hourly.map(function (h) { return h.humidity; }), axis: "right", area: false, dashed: true }
           ],
           aria: "Surface pressure and humidity"
         })
       }) + "</div>";
 
-      out += '<div class="c6">' + C.card({
+      out += '<div class="c6" style="--i:5">' + C.card({
         title: "Daily outlook",
         note: "Open-Meteo daily aggregation — temperature range and UV",
         icon: "bi-sun",
@@ -138,9 +149,9 @@
           labels: (d.daily.time || []).map(function (t) { return C.fmt.day(t); }),
           height: 214,
           series: [
-            { name: "Max °C", color: "#ff9f6e", values: d.daily.tMax || [] },
-            { name: "Min °C", color: "#79b8ff", values: d.daily.tMin || [] },
-            { name: "UV index", color: "#ffcf7a", values: d.daily.uv || [] }
+            { name: "Max °C", color: C.hue("orange"), values: d.daily.tMax || [] },
+            { name: "Min °C", color: C.hue("blue"), values: d.daily.tMin || [] },
+            { name: "UV index", color: C.hue("amber"), values: d.daily.uv || [] }
           ],
           aria: "Daily temperature range and UV index"
         }) +
@@ -178,7 +189,7 @@
 
       out += '<div class="bento">';
 
-      out += '<div class="c12">' + C.card({
+      out += '<div class="c12" style="--i:0">' + C.card({
         title: "Adherence posture",
         note: "lapse days are what the swarm escalates on",
         icon: "bi-clipboard2-pulse",
@@ -192,7 +203,7 @@
           "</div>"
       }) + "</div>";
 
-      out += '<div class="c8">' + C.card({
+      out += '<div class="c8" style="--i:1">' + C.card({
         title: "Adherence → blood pressure, with symptom expression",
         note: d.adherenceEdge
           ? "measured edge: strength " + C.fmt.num(d.adherenceEdge.strength, 3) + " · lag " + d.adherenceEdge.lagHours + "h · confidence " + C.fmt.num(d.adherenceEdge.confidence, 2)
@@ -202,15 +213,15 @@
           labels: tl.map(function (t) { return C.fmt.dayShort(t.day); }),
           height: 250, rightAxis: true,
           series: [
-            { name: "Adherence (%)", color: "#7cf5c4", values: tl.map(function (t) { return t.adherence; }) },
-            { name: "Systolic (mmHg)", color: "#ff8fa3", values: tl.map(function (t) { return t.systolic; }), axis: "right", area: false },
-            { name: "Symptom load (/10)", color: "#ffcf7a", values: tl.map(function (t) { return t.symptomLoad * 10; }), area: false, dashed: true }
+            { name: "Adherence (%)", color: C.hue("mint"), values: tl.map(function (t) { return t.adherence; }) },
+            { name: "Systolic (mmHg)", color: C.hue("rose"), values: tl.map(function (t) { return t.systolic; }), axis: "right", area: false },
+            { name: "Symptom load (/10)", color: C.hue("amber"), values: tl.map(function (t) { return t.symptomLoad * 10; }), area: false, dashed: true }
           ],
           aria: "Adherence versus systolic blood pressure"
         })
       }) + "</div>";
 
-      out += '<div class="c4">' + C.card({
+      out += '<div class="c4" style="--i:2">' + C.card({
         title: "Regimen",
         note: "dose · schedule · refill horizon",
         icon: "bi-capsule-pill",
@@ -224,7 +235,7 @@
         }).join("") + "</div>"
       }) + "</div>";
 
-      out += '<div class="c7">' + C.card({
+      out += '<div class="c7" style="--i:3">' + C.card({
         title: "openFDA adverse-event signal",
         note: "top reported reactions per molecule — live FAERS counts",
         icon: "bi-exclamation-triangle",
@@ -242,7 +253,7 @@
         }).join("") + "</div>"
       }) + "</div>";
 
-      out += '<div class="c5">' + C.card({
+      out += '<div class="c5" style="--i:4">' + C.card({
         title: "Interaction surface",
         note: "pairs sharing adverse-event terms across openFDA reports",
         icon: "bi-shuffle",
@@ -256,7 +267,7 @@
           : '<p class="empty">No shared adverse-event terms across the active regimen.</p>'
       }) + "</div>";
 
-      out += '<div class="c12">' + C.card({
+      out += '<div class="c12" style="--i:5">' + C.card({
         title: "Reported reaction distribution",
         note: "aggregate share of top terms across the regimen",
         icon: "bi-bar-chart",
@@ -315,7 +326,7 @@
 
       out += '<div class="bento">';
 
-      out += '<div class="c12">' + C.card({
+      out += '<div class="c12" style="--i:0">' + C.card({
         title: "Log a food — resolved live against USDA",
         note: "comma-separated; each term is matched to a Foundation / SR Legacy / FNDDS record",
         icon: "bi-search",
@@ -331,7 +342,7 @@
           }).join("") + "</div>"
       }) + "</div>";
 
-      out += '<div class="c5">' + C.card({
+      out += '<div class="c5" style="--i:1">' + C.card({
         title: "Target attainment",
         note: "logged intake vs. the twin's daily targets",
         icon: "bi-bullseye",
@@ -353,7 +364,7 @@
           '<p class="card-note mt8">A Na:K ratio above 1.0 is more predictive of blood-pressure response than sodium alone, which is why both are tracked as separate graph entities.</p>'
       }) + "</div>";
 
-      out += '<div class="c7">' + C.card({
+      out += '<div class="c7" style="--i:2">' + C.card({
         title: "Sodium load → systolic BP",
         note: d.sodiumEdge
           ? "measured edge: strength " + C.fmt.num(d.sodiumEdge.strength, 3) + " · lag " + d.sodiumEdge.lagHours + "h"
@@ -363,14 +374,14 @@
           labels: ss.map(function (s) { return C.fmt.dayShort(s.day); }),
           height: 244, rightAxis: true,
           series: [
-            { name: "Sodium (mg)", color: "#ffcf7a", values: ss.map(function (s) { return s.sodium; }) },
-            { name: "Systolic (mmHg)", color: "#ff8fa3", values: ss.map(function (s) { return s.systolic; }), axis: "right", area: false }
+            { name: "Sodium (mg)", color: C.hue("amber"), values: ss.map(function (s) { return s.sodium; }) },
+            { name: "Systolic (mmHg)", color: C.hue("rose"), values: ss.map(function (s) { return s.systolic; }), axis: "right", area: false }
           ],
           aria: "Sodium intake versus systolic blood pressure"
         })
       }) + "</div>";
 
-      out += '<div class="c7">' + C.card({
+      out += '<div class="c7" style="--i:3">' + C.card({
         title: "Resolved food records",
         note: "per-100g values straight from USDA — brand blank means a Foundation record",
         icon: "bi-basket",
@@ -385,19 +396,19 @@
           }).join("") + "</tbody></table></div>"
       }) + "</div>";
 
-      out += '<div class="c5">' + C.card({
+      out += '<div class="c5" style="--i:4">' + C.card({
         title: "Macro split & hydration",
         note: "energy contribution by macronutrient",
         icon: "bi-pie-chart",
         body: Ch.donut([
-          { label: "Protein", value: (t.protein || 0) * 4, color: "#7cf5c4" },
-          { label: "Carbs", value: (t.carbs || 0) * 4, color: "#79b8ff" },
-          { label: "Fat", value: (t.fat || 0) * 9, color: "#ffcf7a" }
+          { label: "Protein", value: (t.protein || 0) * 4, color: C.hue("mint") },
+          { label: "Carbs", value: (t.carbs || 0) * 4, color: C.hue("blue") },
+          { label: "Fat", value: (t.fat || 0) * 9, color: C.hue("amber") }
         ], { center: C.fmt.compact(t.kcal), centerSub: "KCAL" }) +
           '<div class="mt12">' + Ch.line({
             labels: (d.hydrationSeries || []).map(function (h) { return C.fmt.dayShort(h.day); }),
             height: 140, legend: false, xTicks: 5,
-            series: [{ name: "Hydration (ml)", color: "#6ee7f5", values: (d.hydrationSeries || []).map(function (h) { return h.ml; }) }],
+            series: [{ name: "Hydration (ml)", color: C.hue("cyan"), values: (d.hydrationSeries || []).map(function (h) { return h.ml; }) }],
             aria: "Daily hydration"
           }) + "</div>"
       }) + "</div>";
@@ -439,7 +450,7 @@
 
       out += '<div class="bento">';
 
-      out += '<div class="c12">' + C.card({
+      out += '<div class="c12" style="--i:0">' + C.card({
         cls: "is-flat",
         body: '<div class="stat-strip">' +
           C.statCell("Twin", '<span class="mono" style="font-size:12px">' + C.esc(d.header.twin) + "</span>") +
@@ -449,7 +460,7 @@
           "</div>"
       }) + "</div>";
 
-      out += '<div class="c7">' + C.card({
+      out += '<div class="c7" style="--i:1">' + C.card({
         title: "Vital summary — 14-day means",
         note: "flags follow standard clinical thresholds",
         icon: "bi-heart-pulse",
@@ -460,7 +471,7 @@
           }).join("") + "</tbody></table></div>"
       }) + "</div>";
 
-      out += '<div class="c5">' + C.card({
+      out += '<div class="c5" style="--i:2">' + C.card({
         title: "Risk register",
         note: "graph-weighted, multi-horizon",
         icon: "bi-radar",
@@ -473,7 +484,7 @@
         }), { max: 100 })
       }) + "</div>";
 
-      out += '<div class="c7">' + C.card({
+      out += '<div class="c7" style="--i:3">' + C.card({
         title: "Dominant causal chains",
         note: "ranked by strength × confidence over this twin's series",
         icon: "bi-diagram-3",
@@ -485,7 +496,7 @@
           }).join("") + "</tbody></table></div>"
       }) + "</div>";
 
-      out += '<div class="c5">' + C.card({
+      out += '<div class="c5" style="--i:4">' + C.card({
         title: "Active regimen",
         note: "as reconciled from pharmacy feed + self-report",
         icon: "bi-capsule",
@@ -496,7 +507,7 @@
         }).join("") + "</div>"
       }) + "</div>";
 
-      out += '<div class="c7">' + C.card({
+      out += '<div class="c7" style="--i:5">' + C.card({
         title: "Talking points",
         note: "what to open the consultation with",
         icon: "bi-chat-square-quote",
@@ -507,7 +518,7 @@
           '<p class="card-note mt12"><i class="bi bi-info-circle"></i> ' + C.esc(d.disclaimer) + "</p>"
       }) + "</div>";
 
-      out += '<div class="c5">' + C.card({
+      out += '<div class="c5" style="--i:6">' + C.card({
         title: "Literature grounding",
         note: "live PubMed E-utilities for the leading risk + behavioural driver",
         icon: "bi-journal-medical",

@@ -18,14 +18,21 @@
       var topRisk = (d.risks || []).slice().sort(function (a, b) { return b.score - a.score; })[0] || { label: "—", score: 0, horizon: "" };
 
       var kpis = (d.kpis || []).map(function (k) {
-        var color = k.key === "aqi" ? "#6ee7f5" : k.key === "bp" ? "#ff8fa3" : k.key === "adherence" ? "#7cf5c4" : k.key === "hrv" ? "#79b8ff" : "#b79dff";
+        var hueName = k.key === "aqi" ? "cyan" : k.key === "bp" ? "rose" : k.key === "adherence" ? "mint" : k.key === "hrv" ? "blue" : "violet";
+        var color = C.hue(hueName);
         var invert = k.key === "aqi" || k.key === "bp";
-        return (
-          '<div class="kpi"><p class="kpi-label">' + C.esc(k.label) + "</p>" +
-          '<p class="kpi-value">' + C.fmt.num(k.value, k.key === "twin" ? 1 : 0) + "<small>" + C.esc(k.unit) + "</small></p>" +
-          '<div class="kpi-foot"><div class="kpi-spark">' + Ch.spark(k.spark, { color: color }) + "</div>" +
-          C.deltaHtml(k.delta, invert) + "</div></div>"
-        );
+        var digits = k.key === "twin" ? 1 : 0;
+        return C.kpiCell({
+          label: k.label,
+          value: k.value,
+          display: C.fmt.num(k.value, digits),
+          unit: k.unit,
+          spark: k.spark,
+          color: color,
+          delta: k.delta,
+          invert: invert,
+          foot: invert ? "lower is better" : "higher is better"
+        });
       }).join("");
 
       var out = C.viewHead(
@@ -40,13 +47,13 @@
 
       out += '<div class="bento">';
 
-      out += '<div class="c12">' + C.card({
+      out += '<div class="c12" style="--i:0">' + C.card({
         title: "Live signal panel",
         note: "every value derived from live sources + the twin's own series",
         body: '<div class="kpi-grid">' + kpis + "</div>"
       }) + "</div>";
 
-      out += '<div class="c8">' + C.card({
+      out += '<div class="c8" style="--i:1">' + C.card({
         title: "Cardiometabolic trajectory · 30 days",
         note: "systolic / diastolic vs sleep — measured lag 24h",
         icon: "bi-activity",
@@ -55,16 +62,16 @@
           height: 250,
           rightAxis: true,
           series: [
-            { name: "Systolic (mmHg)", color: "#ff8fa3", values: vitals.map(function (v) { return v.systolic; }) },
-            { name: "Diastolic (mmHg)", color: "#ffcf7a", values: vitals.map(function (v) { return v.diastolic; }), area: false },
-            { name: "Sleep (h)", color: "#79b8ff", values: vitals.map(function (v) { return v.sleepHours; }), axis: "right", area: false, dashed: true }
+            { name: "Systolic (mmHg)", color: C.hue("rose"), values: vitals.map(function (v) { return v.systolic; }) },
+            { name: "Diastolic (mmHg)", color: C.hue("amber"), values: vitals.map(function (v) { return v.diastolic; }), area: false },
+            { name: "Sleep (h)", color: C.hue("blue"), values: vitals.map(function (v) { return v.sleepHours; }), axis: "right", area: false, dashed: true }
           ],
           bands: [{ from: 130, to: 200, color: "rgba(255,143,163,0.06)" }],
           aria: "Blood pressure and sleep over 30 days"
         })
       }) + "</div>";
 
-      out += '<div class="c4">' + C.card({
+      out += '<div class="c4" style="--i:2">' + C.card({
         title: "Risk trajectory",
         note: "graph-weighted, multi-horizon",
         icon: "bi-radar",
@@ -79,7 +86,7 @@
           }), { max: 100 }) + "</div>"
       }) + "</div>";
 
-      out += '<div class="c5">' + C.card({
+      out += '<div class="c5" style="--i:3">' + C.card({
         title: "Cross-domain causal insights",
         note: "Pearson r over the twin's 30-day series",
         icon: "bi-diagram-3",
@@ -94,28 +101,28 @@
         '<div class="mt12"><button type="button" class="btn btn-sm" data-goto="graph"><i class="bi bi-share"></i> Open causal graph</button></div>'
       }) + "</div>";
 
-      out += '<div class="c4">' + C.card({
+      out += '<div class="c4" style="--i:4">' + C.card({
         title: "Environment now",
         note: "Open-Meteo · " + (d.location.live ? "geolocated" : "edge-inferred"),
         icon: "bi-wind",
         body:
           '<div class="stat-strip">' +
-          C.statCell("US AQI", C.fmt.num(d.air.aqi, 0)) +
-          C.statCell("PM2.5", C.fmt.num(d.air.pm25, 1), "µg/m³") +
-          C.statCell("Ozone", C.fmt.num(d.air.ozone, 0), "µg/m³") +
-          C.statCell("Temp", C.fmt.num(d.weather.temperature, 1), "°C") +
-          C.statCell("Humidity", C.fmt.num(d.weather.humidity, 0), "%") +
-          C.statCell("Pollen", C.fmt.num(d.air.pollen, 0)) +
+          C.statCell("US AQI", C.fmt.num(d.air.aqi, 0), "", C.tipModel("US AQI", [{ name: "AQI", value: C.fmt.num(d.air.aqi, 0), color: C.hue("cyan") }], "Open-Meteo air quality")) +
+          C.statCell("PM2.5", C.fmt.num(d.air.pm25, 1), "µg/m³", C.tipModel("PM2.5", [{ name: "PM2.5", value: C.fmt.num(d.air.pm25, 1), unit: "µg/m³", color: C.hue("cyan") }])) +
+          C.statCell("Ozone", C.fmt.num(d.air.ozone, 0), "µg/m³", C.tipModel("Ozone", [{ name: "O₃", value: C.fmt.num(d.air.ozone, 0), unit: "µg/m³", color: C.hue("amber") }])) +
+          C.statCell("Temp", C.fmt.num(d.weather.temperature, 1), "°C", C.tipModel("Temperature", [{ name: "Temp", value: C.fmt.num(d.weather.temperature, 1), unit: "°C", color: C.hue("orange") }])) +
+          C.statCell("Humidity", C.fmt.num(d.weather.humidity, 0), "%", C.tipModel("Humidity", [{ name: "RH", value: C.fmt.num(d.weather.humidity, 0), unit: "%", color: C.hue("blue") }])) +
+          C.statCell("Pollen", C.fmt.num(d.air.pollen, 0), "", C.tipModel("Pollen", [{ name: "Index", value: C.fmt.num(d.air.pollen, 0), color: C.hue("violet") }])) +
           "</div>" +
           '<div class="mt12">' + Ch.line({
             labels: (d.air.hourlyTime || []).map(function (t) { return String(t).slice(11, 16); }),
             height: 118, xTicks: 5, legend: false,
-            series: [{ name: "PM2.5", color: "#6ee7f5", values: d.air.hourly || [] }],
+            series: [{ name: "PM2.5", color: C.hue("cyan"), values: d.air.hourly || [] }],
             aria: "48 hour PM2.5"
           }) + "</div>"
       }) + "</div>";
 
-      out += '<div class="c3">' + C.card({
+      out += '<div class="c3" style="--i:5">' + C.card({
         title: "Next dose",
         note: d.nextDose ? C.fmt.until(d.nextDose.at) : "no active regimen",
         icon: "bi-capsule",
@@ -134,37 +141,37 @@
           '<div class="mt12"><button type="button" class="btn btn-sm" data-goto="medication"><i class="bi bi-capsule-pill"></i> Regimen detail</button></div>'
       }) + "</div>";
 
-      out += '<div class="c6">' + C.card({
+      out += '<div class="c6" style="--i:6">' + C.card({
         title: "Recovery & autonomic state",
         note: "HRV, resting HR, SpO₂ — environment-coupled",
         icon: "bi-heart-pulse",
         body: Ch.line({
           labels: labels, height: 218, rightAxis: true,
           series: [
-            { name: "HRV (ms)", color: "#79b8ff", values: vitals.map(function (v) { return v.hrv; }) },
-            { name: "Resting HR (bpm)", color: "#ff9f6e", values: vitals.map(function (v) { return v.restingHr; }), area: false },
-            { name: "PM2.5 (µg/m³)", color: "#6ee7f5", values: vitals.map(function (v) { return v.pm25; }), axis: "right", area: false, dashed: true }
+            { name: "HRV (ms)", color: C.hue("blue"), values: vitals.map(function (v) { return v.hrv; }) },
+            { name: "Resting HR (bpm)", color: C.hue("orange"), values: vitals.map(function (v) { return v.restingHr; }), area: false },
+            { name: "PM2.5 (µg/m³)", color: C.hue("cyan"), values: vitals.map(function (v) { return v.pm25; }), axis: "right", area: false, dashed: true }
           ],
           aria: "HRV, resting heart rate and PM2.5"
         })
       }) + "</div>";
 
-      out += '<div class="c6">' + C.card({
+      out += '<div class="c6" style="--i:7">' + C.card({
         title: "Mood · stress · symptom load",
         note: "mental-health domain fused with symptom expression",
         icon: "bi-emoji-neutral",
         body: Ch.line({
           labels: labels, height: 218, rightAxis: true,
           series: [
-            { name: "Mood (/10)", color: "#b79dff", values: vitals.map(function (v) { return v.mood; }) },
-            { name: "Symptom load (/10)", color: "#ff8fa3", values: vitals.map(function (v) { return v.symptomLoad; }), area: false },
-            { name: "Stress (/100)", color: "#ffcf7a", values: vitals.map(function (v) { return v.stress; }), axis: "right", area: false, dashed: true }
+            { name: "Mood (/10)", color: C.hue("violet"), values: vitals.map(function (v) { return v.mood; }) },
+            { name: "Symptom load (/10)", color: C.hue("rose"), values: vitals.map(function (v) { return v.symptomLoad; }), area: false },
+            { name: "Stress (/100)", color: C.hue("amber"), values: vitals.map(function (v) { return v.stress; }), axis: "right", area: false, dashed: true }
           ],
           aria: "Mood, symptom load and stress"
         })
       }) + "</div>";
 
-      out += '<div class="c5">' + C.card({
+      out += '<div class="c5" style="--i:8">' + C.card({
         title: "Graph communities",
         note: "GraphRAG stage-2 community summaries",
         icon: "bi-bounding-box",
@@ -177,7 +184,7 @@
         }).join("") + "</div>"
       }) + "</div>";
 
-      out += '<div class="c7">' + C.card({
+      out += '<div class="c7" style="--i:9">' + C.card({
         title: "Multi-domain output surfaces",
         note: "Layer 6 — one twin, five consumers",
         icon: "bi-broadcast",
@@ -213,7 +220,7 @@
 
       out += '<div class="bento">';
 
-      out += '<div class="c12">' + C.card({
+      out += '<div class="c12" style="--i:0">' + C.card({
         title: "Pipeline throughput",
         note: "GraphRAG stage 1 → stage 2 → graph write → quantized embedding",
         icon: "bi-diagram-2",
@@ -226,7 +233,7 @@
           }).join("") + "</div>"
       }) + "</div>";
 
-      out += '<div class="c7">' + C.card({
+      out += '<div class="c7" style="--i:1">' + C.card({
         title: "Source feeds",
         note: "live status per upstream",
         icon: "bi-router",
@@ -239,7 +246,7 @@
           }).join("") + "</tbody></table></div>"
       }) + "</div>";
 
-      out += '<div class="c5">' + C.card({
+      out += '<div class="c5" style="--i:2">' + C.card({
         title: "Records ingested today",
         note: "per source",
         icon: "bi-bar-chart",
@@ -247,15 +254,15 @@
           labels: (d.events || []).map(function (e) { return e.id; }),
           height: 226,
           series: [
-            { name: "Records", color: "#7cf5c4", values: (d.events || []).map(function (e) { return e.recordsToday; }) },
-            { name: "Entities", color: "#79b8ff", values: (d.events || []).map(function (e) { return e.entitiesExtracted; }) },
-            { name: "Edges", color: "#b79dff", values: (d.events || []).map(function (e) { return e.edgesWritten; }) }
+            { name: "Records", color: C.hue("mint"), values: (d.events || []).map(function (e) { return e.recordsToday; }) },
+            { name: "Entities", color: C.hue("blue"), values: (d.events || []).map(function (e) { return e.entitiesExtracted; }) },
+            { name: "Edges", color: C.hue("violet"), values: (d.events || []).map(function (e) { return e.edgesWritten; }) }
           ],
           aria: "Ingestion volume by source"
         })
       }) + "</div>";
 
-      out += '<div class="c12">' + C.card({
+      out += '<div class="c12" style="--i:3">' + C.card({
         title: "Upstream provenance",
         note: "which panels are live vs. deterministic fallback",
         icon: "bi-shield-check",
@@ -285,7 +292,7 @@
 
       out += '<div class="bento">';
 
-      out += '<div class="c4">' + C.card({
+      out += '<div class="c4" style="--i:0">' + C.card({
         title: "Modelled ARR",
         note: "derived from live segment counts",
         icon: "bi-graph-up-arrow",
@@ -293,7 +300,7 @@
           '<p class="kpi-value" style="font-size:34px">$' + C.fmt.compact(d.arr) + "</p>" +
           '<p class="card-note">infrastructure cost per user: $' + C.fmt.num(d.infraCostPerUser, 2) + "</p>" +
           '<div class="mt16">' + Ch.donut((d.segments || []).map(function (s, i) {
-            var colors = ["#7cf5c4", "#79b8ff", "#b79dff", "#ffcf7a", "#ff8fa3"];
+            var colors = [C.hue("mint"), C.hue("blue"), C.hue("violet"), C.hue("amber"), C.hue("rose")];
             var annual = s.id === "consumer" ? s.price * 12 * s.accounts * 0.06
               : s.id === "employer" ? s.price * 12 * s.accounts * 850
               : s.id === "insurer" ? s.price * s.accounts * 240000
@@ -302,7 +309,7 @@
           }), { center: "5", centerSub: "SEGMENTS" }) + "</div>"
       }) + "</div>";
 
-      out += '<div class="c8">' + C.card({
+      out += '<div class="c8" style="--i:1">' + C.card({
         title: "Revenue segments",
         note: "offering · model · unit economics",
         icon: "bi-diagram-3",
@@ -315,7 +322,7 @@
           '<p class="row-sub mt12">' + C.esc(d.flywheel) + "</p>"
       }) + "</div>";
 
-      out += '<div class="c12">' + C.card({
+      out += '<div class="c12" style="--i:2">' + C.card({
         title: "Zero-dollar inference stack",
         note: "free-tier providers · keyed status is live",
         icon: "bi-cpu",

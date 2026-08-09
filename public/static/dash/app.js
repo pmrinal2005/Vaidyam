@@ -94,6 +94,9 @@
         C.state.cache[view] = env;
         root.innerHTML = v.render(env);
         if (v.after) v.after();
+        /* Re-wire chart hit-targets + [data-tip] KPI/stat tooltips after every paint. */
+        if (C.chart && typeof C.chart.bind === "function") C.chart.bind(root);
+        else if (typeof C.bindTips === "function") C.bindTips(root);
         var sub = C.$("#user-sub");
         if (sub && env.data && env.data.graphStats) sub.textContent = "graph " + env.data.graphStats.version;
         if (!o.silent) C.$("#dash-main").scrollTop = 0;
@@ -111,8 +114,11 @@
     var v = V[view];
     if (!env || !v) return C.load(view);
     var root = C.$("#view-root");
+    if (!root) return;
     root.innerHTML = v.render(env);
     if (v.after) v.after();
+    if (C.chart && typeof C.chart.bind === "function") C.chart.bind(root);
+    else if (typeof C.bindTips === "function") C.bindTips(root);
   };
 
   C.goto = function (view) {
@@ -174,26 +180,41 @@
       if (h && V[h] && h !== C.state.view) C.load(h);
     });
 
-    // Re-render SVG-heavy views on breakpoint changes so layouts stay legible.
-    var lastBucket = bucket();
+    // Re-render SVG-heavy views on resize so chart widths stay correct.
+    // Debounced; always fires (not only on breakpoint bucket changes) because
+    // chart viewBoxes are computed from the host width at render time.
+    var lastW = window.innerWidth;
     window.addEventListener("resize", function () {
-      var b = bucket();
-      if (b === lastBucket) return;
-      lastBucket = b;
-      clearTimeout(wire._t);
-      wire._t = setTimeout(function () { C.rerender(); }, 220);
+      var w = window.innerWidth;
+      // Ignore sub-pixel / mobile URL-bar jitter under 8px.
+      if (Math.abs(w - lastW) < 8) return;
+      lastW = w;
+      clearTimeout(wire._rt);
+      wire._rt = setTimeout(function () { C.rerender(); }, 180);
     });
-  }
-
-  function bucket() {
-    var w = window.innerWidth;
-    return w < 431 ? 0 : w < 641 ? 1 : w < 861 ? 2 : w < 1025 ? 3 : w < 1281 ? 4 : 5;
   }
 
   /* ── Boot ── */
   function boot() {
     buildNav();
     wire();
+
+    /* Theme toggle (Sun/Moon) next to the live indicator. */
+    var themeBtn = C.$("#theme-toggle");
+    if (themeBtn && C.theme) {
+      C.theme.syncToggle();
+      themeBtn.addEventListener("click", function () {
+        C.theme.toggle();
+      });
+    }
+    /* Charts bake colours into SVG attributes — re-render on every theme flip. */
+    if (C.theme && typeof C.theme.onChange === "function") {
+      C.theme.onChange(function () {
+        C.theme.invalidate();
+        C.rerender();
+      });
+    }
+
     var av = C.$("#user-name");
     if (av) av.textContent = "Twin " + String(C.state.uid || "").replace("twin-", "").slice(0, 6);
 

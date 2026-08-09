@@ -17,12 +17,21 @@ export const viewport: Viewport = {
 };
 
 /**
+ * Synchronous pre-paint boot.
+ * Anchors theming on <html data-theme> + <html data-dash="1"> before first paint
+ * so the shared App Router layout can never leave near-white ink on a white body
+ * (the original invisible-text FOUC).
+ */
+const THEME_BOOT = `(function(){try{var k="catena-theme";var s=null;try{s=localStorage.getItem(k)}catch(e){}var t=(s==="light"||s==="dark")?s:((window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches)?"light":"dark");var r=document.documentElement;r.setAttribute("data-theme",t);r.setAttribute("data-dash","1");r.style.colorScheme=t;var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content",t==="light"?"#eef2f8":"#07080a")}catch(e){try{document.documentElement.setAttribute("data-theme","dark");document.documentElement.setAttribute("data-dash","1")}catch(_){}}})();`;
+
+/**
  * Catena dashboard shell.
  * All panels talk to same-origin /api/* Next.js route handlers (dynamic data).
  */
 export default function DashboardPage() {
   return (
     <>
+      <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
       <link
         href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@300;400;500;600;700&display=swap"
         rel="stylesheet"
@@ -109,6 +118,20 @@ export default function DashboardPage() {
             </div>
 
             <div className="topbar-right">
+              <button
+                type="button"
+                id="theme-toggle"
+                className="theme-toggle"
+                aria-label="Switch theme"
+                title="Switch theme"
+                aria-pressed="false"
+              >
+                <i className="bi bi-sun-fill ic-sun" aria-hidden="true" />
+                <i className="bi bi-moon-stars-fill ic-moon" aria-hidden="true" />
+                <span id="theme-toggle-label" className="sr-only">
+                  Dark theme active
+                </span>
+              </button>
               <div className="live-chip" id="live-chip" title="Live data source status">
                 <span className="live-dot" aria-hidden="true" />
                 <span id="live-chip-text">connecting</span>

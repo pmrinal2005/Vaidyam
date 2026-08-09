@@ -29,14 +29,14 @@
 
       out += '<div class="bento">';
 
-      out += '<div class="c12">' + C.card({
+      out += '<div class="c12" style="--i:0">' + C.card({
         title: "Proof boundary",
         note: "what crosses the trust boundary, and what provably does not",
         icon: "bi-shield-check",
         body:
           '<div class="grid2">' +
           '<div class="stat-cell"><p class="stat-k">Leaves the twin</p><p class="stat-v" style="font-size:13px;color:var(--accent)">public output + proof bytes + commitment</p></div>' +
-          '<div class="stat-cell"><p class="stat-k">Never leaves the twin</p><p class="stat-v" style="font-size:13px;color:#ff8fa3">raw series, timestamps, drug identities, locations</p></div>' +
+          '<div class="stat-cell"><p class="stat-k">Never leaves the twin</p><p class="stat-v" style="font-size:13px;color:var(--rose)">raw series, timestamps, drug identities, locations</p></div>' +
           "</div>" +
           '<p class="card-note mt12">' + C.esc(d.boundary) + "</p>" +
           '<div class="chip-row mt12">' + (d.toolchains || []).map(function (t) {
@@ -44,7 +44,7 @@
           }).join("") + "</div>"
       }) + "</div>";
 
-      out += '<div class="c12">' + C.card({
+      out += '<div class="c12" style="--i:1">' + C.card({
         title: "Attestable claims",
         note: "window " + d.windowDays + " days · each card is independently verifiable by a third party",
         icon: "bi-patch-check",
@@ -71,7 +71,7 @@
         }).join("") + "</div>"
       }) + "</div>";
 
-      out += '<div class="c6">' + C.card({
+      out += '<div class="c6" style="--i:2">' + C.card({
         title: "Proving cost profile",
         note: "constraint count drives prover time; verification stays constant-time",
         icon: "bi-speedometer2",
@@ -79,15 +79,15 @@
           labels: atts.map(function (a) { return a.claim.split("_")[0]; }),
           height: 226, rightAxis: true,
           series: [
-            { name: "Prove (ms)", color: "#b79dff", values: atts.map(function (a) { return a.proveMs; }) },
-            { name: "Verify (ms)", color: "#7cf5c4", values: atts.map(function (a) { return a.verifyMs; }) }
+            { name: "Prove (ms)", color: C.hue("violet"), values: atts.map(function (a) { return a.proveMs; }) },
+            { name: "Verify (ms)", color: C.hue("mint"), values: atts.map(function (a) { return a.verifyMs; }) }
           ],
           aria: "Proving and verification time per claim"
         }) +
           '<p class="card-note mt8">Asymmetry is the point — an insurer verifies in milliseconds regardless of how long the twin spent proving.</p>'
       }) + "</div>";
 
-      out += '<div class="c6">' + C.card({
+      out += '<div class="c6" style="--i:3">' + C.card({
         title: "Consumers of proofs",
         note: "who verifies what, and what they still cannot see",
         icon: "bi-people",
@@ -99,7 +99,7 @@
         ].map(function (r) {
           return '<div class="row"><div class="row-main"><p class="row-title">' + C.esc(r.who) + "</p>" +
             '<p class="row-sub"><b style="color:var(--accent)">verifies:</b> ' + C.esc(r.what) + "</p>" +
-            '<p class="row-sub"><b style="color:#ff8fa3">cannot see:</b> ' + C.esc(r.cannot) + "</p></div></div>";
+            '<p class="row-sub"><b style="color:var(--rose)">cannot see:</b> ' + C.esc(r.cannot) + "</p></div></div>";
         }).join("") + "</div>"
       }) + "</div>";
 
@@ -148,7 +148,7 @@
               if (box) {
                 box.hidden = false;
                 box.innerHTML =
-                  '<p class="tiny mono" style="color:' + (j.verified ? "var(--accent)" : "#ff8fa3") + '">' +
+                  '<p class="tiny mono" style="color:' + (j.verified ? "var(--accent)" : "var(--rose)") + '">' +
                   (j.verified ? "VERIFIED" : "REJECTED") + " in " + j.verifierMs + "ms · raw data exposed: " + (j.rawDataExposed ? "yes" : "no") + "</p>" +
                   '<p class="tiny muted">' + C.esc(j.note) + "</p>" +
                   '<p class="tiny mono muted" style="overflow-wrap:anywhere">' + C.esc(j.verificationDigest) + "</p>";
@@ -170,6 +170,7 @@
     render: function (env) {
       var d = env.data;
       var m = d.metrics || [];
+      var m0 = m[0] || null;
       var rounds = d.rounds || [];
 
       var out = C.viewHead(
@@ -178,12 +179,12 @@
         "Edge functions compute <b>locally noised</b> statistics from each twin's graph and a periodic job combines them — raw records never reach a central store. That is what avoids the classic federated-learning trade-off where aggregation destroys individual nuance while still costing heavy communication. The result is a near-real-time environmental-health signal instead of a multi-week syndromic lag.",
         '<span class="badge info">ε = ' + C.fmt.num(d.epsilon, 2) + "</span>" +
         '<span class="badge violet">cohort ' + C.fmt.compact(d.cohort) + "</span>" +
-        '<span class="badge ' + (d.metrics[0] && d.metrics[0].kAnonymous ? "good" : "bad") + '">k-anonymous</span>'
+        '<span class="badge ' + (m0 && m0.kAnonymous ? "good" : "bad") + '">k-anonymous</span>'
       );
 
       out += '<div class="bento">';
 
-      out += '<div class="c12">' + C.card({
+      out += '<div class="c12" style="--i:0">' + C.card({
         title: "Privacy budget controls",
         note: "smaller ε means stronger privacy and noisier aggregates — the trade-off is explicit, not hidden",
         icon: "bi-sliders2",
@@ -191,7 +192,7 @@
           '<div class="lever"><div class="lever-head"><span class="lever-label">Privacy budget ε</span>' +
           '<span class="lever-val mono" id="eps-out">' + C.fmt.num(d.epsilon, 2) + "</span></div>" +
           '<input type="range" id="eps-range" min="0.1" max="8" step="0.1" value="' + d.epsilon + '" aria-label="Privacy budget epsilon" />' +
-          '<p class="lever-base">δ = ' + d.metrics[0].delta.toExponential(0) + " · " + C.esc(d.budget.mechanism) + "</p></div>" +
+          '<p class="lever-base">δ = ' + (m0 && m0.delta != null ? Number(m0.delta).toExponential(0) : "—") + " · " + C.esc((d.budget && d.budget.mechanism) || "gaussian") + "</p></div>" +
           '<div class="lever mt12"><div class="lever-head"><span class="lever-label">Cohort size</span>' +
           '<span class="lever-val mono" id="cohort-out">' + C.fmt.compact(d.cohort) + "</span></div>" +
           '<input type="range" id="cohort-range" min="50" max="50000" step="50" value="' + d.cohort + '" aria-label="Cohort size" />' +
@@ -204,7 +205,7 @@
           "</div>"
       }) + "</div>";
 
-      out += '<div class="c7">' + C.card({
+      out += '<div class="c7" style="--i:1">' + C.card({
         title: "Local truth vs. released aggregate",
         note: "the released value is the only one that ever leaves the twin",
         icon: "bi-eye-slash",
@@ -221,7 +222,7 @@
           '<p class="card-note mt8">The "local" column is shown here only because you are the data owner — an aggregator sees the released column exclusively.</p>'
       }) + "</div>";
 
-      out += '<div class="c5">' + C.card({
+      out += '<div class="c5" style="--i:2">' + C.card({
         title: "Noise impact by metric",
         note: "absolute distortion introduced by the Gaussian mechanism",
         icon: "bi-soundwave",
@@ -236,7 +237,7 @@
           '<p class="card-note mt12">At this ε the environmental signal survives aggregation while individual contributions remain indistinguishable.</p>'
       }) + "</div>";
 
-      out += '<div class="c8">' + C.card({
+      out += '<div class="c8" style="--i:3">' + C.card({
         title: "Federated aggregation rounds",
         note: "Flower-style periodic aggregation across edge functions",
         icon: "bi-arrow-repeat",
@@ -244,9 +245,9 @@
           labels: rounds.map(function (r) { return "R" + r.round; }),
           height: 236, rightAxis: true,
           series: [
-            { name: "Clients", color: "#7cf5c4", values: rounds.map(function (r) { return r.clients; }) },
-            { name: "Dropouts", color: "#ff8fa3", values: rounds.map(function (r) { return r.dropouts; }) },
-            { name: "ε spent", color: "#b79dff", values: rounds.map(function (r) { return r.epsilonSpent; }) }
+            { name: "Clients", color: C.hue("mint"), values: rounds.map(function (r) { return r.clients; }) },
+            { name: "Dropouts", color: C.hue("rose"), values: rounds.map(function (r) { return r.dropouts; }) },
+            { name: "ε spent", color: C.hue("violet"), values: rounds.map(function (r) { return r.epsilonSpent; }) }
           ],
           aria: "Federated rounds, clients and epsilon spend"
         }) +
@@ -254,14 +255,14 @@
             labels: rounds.map(function (r) { return "R" + r.round; }),
             height: 168, rightAxis: true,
             series: [
-              { name: "Aggregated PM2.5 (µg/m³)", color: "#6ee7f5", values: rounds.map(function (r) { return r.aggregatedPm25; }) },
-              { name: "Utility loss (%)", color: "#ffcf7a", values: rounds.map(function (r) { return r.utilityLoss; }), axis: "right", area: false, dashed: true }
+              { name: "Aggregated PM2.5 (µg/m³)", color: C.hue("cyan"), values: rounds.map(function (r) { return r.aggregatedPm25; }) },
+              { name: "Utility loss (%)", color: C.hue("amber"), values: rounds.map(function (r) { return r.utilityLoss; }), axis: "right", area: false, dashed: true }
             ],
             aria: "Aggregated exposure and utility loss per round"
           }) + "</div>"
       }) + "</div>";
 
-      out += '<div class="c4">' + C.card({
+      out += '<div class="c4" style="--i:4">' + C.card({
         title: "Cohort signal",
         note: "the actual public-health product",
         icon: "bi-broadcast-pin",
@@ -272,10 +273,10 @@
           C.statCell("Causal lag", C.fmt.num(d.signal.lagHours, 0), "h") +
           "</div>" +
           '<p class="card-note mt12"><b style="color:var(--accent)">Lead time:</b> ' + C.esc(d.signal.leadTimeVsSyndromic) + "</p>" +
-          '<div class="mt12">' + Ch.gauge(Math.abs(d.signal.correlation) * 100, { sub: "SIGNAL STRENGTH", color: "#6ee7f5" }) + "</div>"
+          '<div class="mt12">' + Ch.gauge(Math.abs(d.signal.correlation) * 100, { sub: "SIGNAL STRENGTH", color: C.hue("cyan") }) + "</div>"
       }) + "</div>";
 
-      out += '<div class="c7">' + C.card({
+      out += '<div class="c7" style="--i:5">' + C.card({
         title: "Population reference layer",
         note: "open population-health upstream for cohort calibration",
         icon: "bi-people-fill",
@@ -290,7 +291,7 @@
           '<p class="card-note mt12">Population counts only calibrate the cohort denominator — no individual twin record is joined against them.</p>'
       }) + "</div>";
 
-      out += '<div class="c5">' + C.card({
+      out += '<div class="c5" style="--i:6">' + C.card({
         title: "Aggregation framework",
         note: "how the guarantee is actually enforced",
         icon: "bi-diagram-2",
@@ -346,7 +347,7 @@
 
       out += '<div class="bento">';
 
-      out += '<div class="c12">' + C.card({
+      out += '<div class="c12" style="--i:0">' + C.card({
         title: "Index footprint",
         note: q.vectors ? C.fmt.compact(q.vectors) + " vectors × " + q.dim + " dimensions" : "index not yet built",
         icon: "bi-hdd",
@@ -364,7 +365,7 @@
           '<p class="card-note mt8">float32 is shown for reference only — it is never persisted, because it would breach the envelope long before the graph becomes interesting.</p>'
       }) + "</div>";
 
-      out += '<div class="c7">' + C.card({
+      out += '<div class="c7" style="--i:1">' + C.card({
         title: "Two-stage retrieval",
         note: "binary first-pass → int8 re-rank recovers most of the lost recall",
         icon: "bi-layers-half",
@@ -379,7 +380,7 @@
         }).join("") + "</div>"
       }) + "</div>";
 
-      out += '<div class="c5">' + C.card({
+      out += '<div class="c5" style="--i:2">' + C.card({
         title: "Recall vs. footprint",
         note: "compression is only worth it if recall survives the re-score",
         icon: "bi-crosshair",
@@ -390,7 +391,7 @@
           height: 224,
           xLabel: "index KB",
           yLabel: "recall %",
-          color: "#b79dff",
+          color: C.hue("violet"),
           aria: "Recall versus index size across truncation profiles"
         }) +
           '<div class="stat-strip mt12">' +
@@ -399,7 +400,7 @@
           "</div>"
       }) + "</div>";
 
-      out += '<div class="c7">' + C.card({
+      out += '<div class="c7" style="--i:3">' + C.card({
         title: "Matryoshka truncation profiles",
         note: d.matryoshka ? d.matryoshka.note : "",
         icon: "bi-box-seam",
@@ -412,12 +413,12 @@
           '<div class="mt12">' + Ch.bars({
             labels: ((d.matryoshka || {}).profiles || []).map(function (p) { return p.dim + "d"; }),
             height: 176,
-            series: [{ name: "Recall %", color: "#79b8ff", values: ((d.matryoshka || {}).profiles || []).map(function (p) { return p.recall * 100; }) }],
+            series: [{ name: "Recall %", color: C.hue("blue"), values: ((d.matryoshka || {}).profiles || []).map(function (p) { return p.recall * 100; }) }],
             aria: "Recall by truncated dimension"
           }) + "</div>"
       }) + "</div>";
 
-      out += '<div class="c5">' + C.card({
+      out += '<div class="c5" style="--i:4">' + C.card({
         title: "Graph storage schema",
         note: "Postgres + pgvector · row-level security per twin",
         icon: "bi-table",

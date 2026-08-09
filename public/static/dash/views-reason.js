@@ -24,7 +24,7 @@
 
       out += '<div class="bento">';
 
-      out += '<div class="c8">' + C.card({
+      out += '<div class="c8" style="--i:0">' + C.card({
         title: "Graph topology",
         note: d.seeds && d.seeds.length ? "PPR seeded from: " + d.seeds.join(", ") : "no query — sized by degree centrality. Type a question in the search bar to seed retrieval.",
         icon: "bi-bounding-box-circles",
@@ -34,7 +34,7 @@
           }).join("") + "</div>"
       }) + "</div>";
 
-      out += '<div class="c4">' + C.card({
+      out += '<div class="c4" style="--i:1">' + C.card({
         title: "HippoRAG retrieval",
         note: "personalized PageRank · damping 0.85 · 40 iterations",
         icon: "bi-search",
@@ -52,7 +52,7 @@
         }).join("") + "</div>"
       }) + "</div>";
 
-      out += '<div class="c7">' + C.card({
+      out += '<div class="c7" style="--i:2">' + C.card({
         title: "Causal edges — measured, not assumed",
         note: "strength = lagged correlation over this twin's own series",
         icon: "bi-arrow-left-right",
@@ -69,7 +69,7 @@
           }).join("") + "</tbody></table></div>"
       }) + "</div>";
 
-      out += '<div class="c5">' + C.card({
+      out += '<div class="c5" style="--i:3">' + C.card({
         title: "Community summaries",
         note: "GraphRAG stage 2 — pre-generated for closely related entities",
         icon: "bi-collection",
@@ -144,7 +144,7 @@
 
       out += '<div class="bento">';
 
-      out += '<div class="c12">' + C.card({
+      out += '<div class="c12" style="--i:0">' + C.card({
         title: "Query under consensus",
         note: "FrugalGPT-style router decision",
         icon: "bi-question-circle",
@@ -161,20 +161,20 @@
           '<p class="row-sub mt12"><b style="color:var(--accent-2)">Router:</b> ' + C.esc(d.route.reason) + "</p>"
       }) + "</div>";
 
-      out += '<div class="c7">' + C.card({
+      out += '<div class="c7" style="--i:1">' + C.card({
         title: "MoA topology",
         note: "layer 1 specialists → layer 2 coordinator",
         icon: "bi-diagram-3",
         body: Ch.swarmTopology(d.agents || [], d.consensus)
       }) + "</div>";
 
-      out += '<div class="c5">' + C.card({
+      out += '<div class="c5" style="--i:2">' + C.card({
         title: "Agent-Forest ballot",
         note: "sampling-and-voting across free-tier providers",
         icon: "bi-check2-square",
         body: Ch.donut(Object.keys(d.consensus.distribution || {}).map(function (k, i) {
-          var colors = { maintain: "#7cf5c4", reinforce: "#ffcf7a", intervene: "#ff8fa3" };
-          return { label: k, value: d.consensus.distribution[k], color: colors[k] || ["#79b8ff", "#b79dff"][i % 2] };
+          var colors = { maintain: C.hue("mint"), reinforce: C.hue("amber"), intervene: C.hue("rose") };
+          return { label: k, value: d.consensus.distribution[k], color: colors[k] || [C.hue("blue"), C.hue("violet")][i % 2] };
         }), { center: String(Math.round(d.consensus.support)) + "%", centerSub: "SUPPORT" }) +
           '<div class="mt12">' + Ch.hbars((d.retrievalTop || []).map(function (r) {
             return { label: r.label, value: r.score, display: C.fmt.num(r.score, 3), cls: "cool" };
@@ -183,7 +183,7 @@
       }) + "</div>";
 
       if (coord) {
-        out += '<div class="c12">' + C.card({
+        out += '<div class="c12" style="--i:3">' + C.card({
           title: "Preventive-Care Coordinator — fused recommendation",
           note: coord.model + " · " + coord.latencyMs + "ms · confidence " + coord.confidence,
           icon: "bi-stars",
@@ -196,12 +196,12 @@
         }) + "</div>";
       }
 
-      out += '<div class="c12">' + C.card({
+      out += '<div class="c12" style="--i:4">' + C.card({
         title: "Layer-1 specialist verdicts",
         note: "each agent reasons only over the supplied causal-graph context",
         icon: "bi-people",
         body: '<div class="agent-grid">' + l1.map(function (a) {
-          var col = C.DOMAIN_COLOR[a.domain] || "#7cf5c4";
+          var col = C.DOMAIN_COLOR[a.domain] || C.hue("mint");
           return (
             '<div class="agent"><div class="agent-top">' +
             '<span class="agent-dot" style="background:' + col + '"></span>' +
@@ -237,7 +237,7 @@
 
       out += '<div class="bento">';
 
-      out += '<div class="c8">' + C.card({
+      out += '<div class="c8" style="--i:0">' + C.card({
         title: "Cascade stages",
         note: "invoked stages only incur work — skipped stages cost nothing",
         icon: "bi-layers",
@@ -254,7 +254,7 @@
         }).join("") + "</div>"
       }) + "</div>";
 
-      out += '<div class="c4">' + C.card({
+      out += '<div class="c4" style="--i:1">' + C.card({
         title: "Cost vs frontier baseline",
         note: "same reasoning depth billed on a frontier cloud model",
         icon: "bi-cash-coin",
@@ -265,11 +265,11 @@
           C.statCell("Savings", C.fmt.num(d.totals.savings, 0), "%") +
           C.statCell("Acceptance", C.fmt.num(d.totals.acceptance * 100, 1), "%") +
           "</div>" +
-          '<div class="mt16">' + Ch.gauge(d.totals.acceptance * 100, { sub: "TOKENS ACCEPTED", color: "#79b8ff" }) + "</div>" +
+          '<div class="mt16">' + Ch.gauge(d.totals.acceptance * 100, { sub: "TOKENS ACCEPTED", color: C.hue("blue") }) + "</div>" +
           '<p class="card-note" style="text-align:center">Speculated tokens accepted without verifier work.</p>'
       }) + "</div>";
 
-      out += '<div class="c7">' + C.card({
+      out += '<div class="c7" style="--i:2">' + C.card({
         title: "24-hour cascade utilisation",
         note: "most daily check-ins never leave step 1",
         icon: "bi-bar-chart-steps",
@@ -279,9 +279,9 @@
           stacked: true,
           xTicks: 12,
           series: [
-            { name: "Draft only", color: "#7cf5c4", values: (d.utilisation || []).map(function (u) { return u.draftOnly; }) },
-            { name: "Verified", color: "#79b8ff", values: (d.utilisation || []).map(function (u) { return u.verified; }) },
-            { name: "Swarm consensus", color: "#b79dff", values: (d.utilisation || []).map(function (u) { return u.swarm; }) }
+            { name: "Draft only", color: C.hue("mint"), values: (d.utilisation || []).map(function (u) { return u.draftOnly; }) },
+            { name: "Verified", color: C.hue("blue"), values: (d.utilisation || []).map(function (u) { return u.verified; }) },
+            { name: "Swarm consensus", color: C.hue("violet"), values: (d.utilisation || []).map(function (u) { return u.swarm; }) }
           ],
           aria: "Cascade stage utilisation by hour"
         }) +
@@ -293,7 +293,7 @@
           "</div>"
       }) + "</div>";
 
-      out += '<div class="c5">' + C.card({
+      out += '<div class="c5" style="--i:3">' + C.card({
         title: "Free-tier provider quotas",
         note: "router avoids exhausted providers automatically",
         icon: "bi-hdd-stack",
@@ -334,7 +334,7 @@
 
       out += '<div class="bento">';
 
-      out += '<div class="c4">' + C.card({
+      out += '<div class="c4" style="--i:0">' + C.card({
         title: "Intervention levers",
         note: "baselines = your own 14-day means",
         icon: "bi-sliders2-vertical",
@@ -342,12 +342,14 @@
         body: '<div>' + (d.levers || []).map(function (l) {
           var val = d.interventions[l.id] !== undefined ? d.interventions[l.id] : l.baseline;
           var delta = val - l.baseline;
+          var unit = l.unit || "";
           return (
             '<div class="lever"><div class="lever-head"><span class="lever-label">' + C.esc(l.label) + "</span>" +
-            '<span class="lever-val" id="cfv-' + C.esc(l.id) + '">' + C.fmt.num(val, l.step < 1 ? 2 : 0) + " " + C.esc(l.unit) + "</span></div>" +
-            '<input type="range" data-lever="' + C.esc(l.id) + '" min="' + l.min + '" max="' + l.max + '" step="' + l.step + '" value="' + val + '" ' +
+            '<span class="lever-val" id="cfv-' + C.esc(l.id) + '" data-unit="' + C.esc(unit) + '">' +
+            C.fmt.num(val, l.step < 1 ? 2 : 0) + (unit ? " " + C.esc(unit) : "") + "</span></div>" +
+            '<input type="range" data-lever="' + C.esc(l.id) + '" data-unit="' + C.esc(unit) + '" min="' + l.min + '" max="' + l.max + '" step="' + l.step + '" value="' + val + '" ' +
             'aria-label="' + C.esc(l.label) + '" />' +
-            '<p class="lever-base">baseline ' + C.fmt.num(l.baseline, l.step < 1 ? 2 : 0) + " " + C.esc(l.unit) +
+            '<p class="lever-base">baseline ' + C.fmt.num(l.baseline, l.step < 1 ? 2 : 0) + (unit ? " " + C.esc(unit) : "") +
             (Math.abs(delta) > l.step / 2 ? ' · <span style="color:var(--accent)">' + (delta > 0 ? "+" : "") + C.fmt.num(delta, l.step < 1 ? 2 : 0) + "</span>" : "") +
             " · node " + C.esc(l.node) + "</p></div>"
           );
@@ -358,7 +360,7 @@
           }).join("") + "</div></div>"
       }) + "</div>";
 
-      out += '<div class="c8">' + C.card({
+      out += '<div class="c8" style="--i:1">' + C.card({
         title: "Projected outcomes",
         note: "confidence " + C.fmt.num(d.confidence, 2) + " · behavioural adherence cost " + C.fmt.num(d.adherenceCost, 0) + "/100",
         icon: "bi-graph-up",
@@ -376,15 +378,15 @@
           }).join("") + "</tbody></table></div>"
       }) + "</div>";
 
-      out += '<div class="c5">' + C.card({
+      out += '<div class="c5" style="--i:2">' + C.card({
         title: "Adherence cost of this plan",
         note: "larger deviations from current behaviour are harder to sustain",
         icon: "bi-person-check",
-        body: Ch.gauge(d.adherenceCost, { sub: "DIFFICULTY", color: d.adherenceCost < 34 ? "#7cf5c4" : d.adherenceCost < 64 ? "#ffcf7a" : "#ff8fa3" }) +
+        body: Ch.gauge(d.adherenceCost, { sub: "DIFFICULTY", color: d.adherenceCost < 34 ? C.hue("mint") : d.adherenceCost < 64 ? C.hue("amber") : C.hue("rose") }) +
           '<p class="row-sub" style="text-align:center">' + C.esc(d.method) + "</p>"
       }) + "</div>";
 
-      out += '<div class="c7">' + C.card({
+      out += '<div class="c7" style="--i:3">' + C.card({
         title: "Literature grounding",
         note: "live PubMed E-utilities / Europe PMC for the active intervention set",
         icon: "bi-journal-medical",
@@ -411,7 +413,12 @@
           var out = C.$("#cfv-" + id);
           if (out) {
             var step = Number(inp.step);
-            out.textContent = C.fmt.num(val, step < 1 ? 2 : 0) + " " + out.textContent.split(" ").slice(1).join(" ");
+            /* Unit is stored on data-unit — never re-parse the label text.
+               (Previously split(" ").slice(1) corrupted multi-word units like
+               "mmHg" was fine but "hrs / night" and values like "-1.5 mg"
+               accumulated garbage on every input event.) */
+            var unit = inp.getAttribute("data-unit") || out.getAttribute("data-unit") || "";
+            out.textContent = C.fmt.num(val, step < 1 ? 2 : 0) + (unit ? " " + unit : "");
           }
           clearTimeout(deb);
           deb = setTimeout(function () { C.load("counterfactual", { silent: true }); }, 420);

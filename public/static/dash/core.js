@@ -615,10 +615,75 @@
     );
   };
 
-  C.statCell = function (k, v, unit) {
+  /**
+   * Serialises a tooltip payload for data-tip="…". Escapes quotes so the
+   * attribute stays well-formed when values contain units or punctuation.
+   */
+  C.tipPayload = function (model) {
+    try {
+      return C.esc(JSON.stringify(model || {}));
+    } catch (e) {
+      return C.esc("{\"title\":\"\"}");
+    }
+  };
+
+  /**
+   * KPI / stat tooltip builder — keeps the shape consistent across views.
+   * rows: [{name,value,unit,color?}]
+   */
+  C.tipModel = function (title, rows, foot) {
+    return { title: title || "", rows: rows || [], foot: foot || "" };
+  };
+
+  /**
+   * Wraps a bento cell with the stagger index CSS custom property.
+   * Usage: out += C.cell("c8", 2, html)
+   */
+  C._stagger = 0;
+  C.cell = function (cls, i, html) {
+    var idx = (typeof i === "number") ? i : (C._stagger++);
+    return '<div class="' + (cls || "c12") + '" style="--i:' + idx + '">' + (html || "") + "</div>";
+  };
+  C.resetStagger = function () { C._stagger = 0; };
+
+  C.statCell = function (k, v, unit, tip) {
+    var tipAttr = "";
+    if (tip) {
+      var plain = String(v == null ? "" : v).replace(/<[^>]+>/g, "");
+      var model;
+      if (tip === true) {
+        model = C.tipModel(k, [{ name: k, value: plain, unit: unit || "" }]);
+      } else if (typeof tip === "string") {
+        model = C.tipModel(tip, [{ name: k, value: plain, unit: unit || "" }]);
+      } else {
+        model = tip;
+        if (!model.title) model.title = k;
+      }
+      tipAttr = ' data-tip="' + C.tipPayload(model) + '"';
+    }
     return (
-      '<div class="stat-cell"><p class="stat-k">' + C.esc(k) + '</p>' +
+      '<div class="stat-cell"' + tipAttr + '><p class="stat-k">' + C.esc(k) + "</p>" +
       '<p class="stat-v">' + v + (unit ? "<small>" + C.esc(unit) + "</small>" : "") + "</p></div>"
+    );
+  };
+
+  /** KPI card helper with data-tip + semantic hue. */
+  C.kpiCell = function (opts) {
+    var o = opts || {};
+    var color = o.color || C.hue("mint");
+    var tip = o.tip || C.tipModel(o.label, [
+      { name: o.label || "Value", value: String(o.display != null ? o.display : o.value), unit: o.unit || "", color: color },
+      o.delta != null ? { name: "Δ", value: (o.delta > 0 ? "+" : "") + C.fmt.num(o.delta, 2), unit: o.unit || "" } : null
+    ].filter(Boolean), o.foot || "");
+    return (
+      '<div class="kpi" data-tip="' + C.tipPayload(tip) + '">' +
+      '<p class="kpi-label">' + C.esc(o.label || "") + "</p>" +
+      '<p class="kpi-value">' + (o.display != null ? o.display : C.fmt.num(o.value, o.digits != null ? o.digits : 0)) +
+      (o.unit ? "<small>" + C.esc(o.unit) + "</small>" : "") + "</p>" +
+      '<div class="kpi-foot"><div class="kpi-spark">' +
+      (window.Catena.chart && o.spark ? window.Catena.chart.spark(o.spark, { color: color }) : "") +
+      "</div>" + (o.deltaHtml != null ? o.deltaHtml : (o.delta != null ? C.deltaHtml(o.delta, o.invert) : "")) +
+      "</div></div>"
     );
   };
 
