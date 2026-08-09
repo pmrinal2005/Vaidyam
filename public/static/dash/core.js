@@ -130,6 +130,11 @@
   }
 
   /** Resolves (and memoises) the API base. Never rejects. */
+  C.resetApi = function () {
+    C.apiBase = null;
+    C._resolving = null;
+  };
+
   C.resolveApi = function () {
     if (C._resolving) return C._resolving;
     C._resolving = (function () {

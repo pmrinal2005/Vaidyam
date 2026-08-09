@@ -1,25 +1,22 @@
-# Vaidyam / Catena — Next.js on Vercel + Supabase Postgres
+# Vaidyam / Catena — Next.js + PostgreSQL (Vercel-ready)
 
-Full-stack rebuild of [pmrinal2005/Vaidyam](https://github.com/pmrinal2005/Vaidyam) as a single
-**Next.js (App Router)** application with **PostgreSQL via Drizzle**. Ready for the
-**Vercel free tier**, with the **Supabase free tier** as the recommended Postgres host.
+Full-stack **Next.js (App Router)** app with **PostgreSQL via Drizzle**.  
+Deploy on the **Vercel free tier**; use local Postgres or **Supabase free tier** for the database.
 
-There is **no Cloudflare Pages / Workers / wrangler / Hono** anywhere in this project. All
-`/api/*` routes are plain Next.js Route Handlers running on the Node.js runtime, so the
-dashboard's API calls are always answered by real serverless functions on Vercel — no external
-worker, no static-host fallback, no 404s.
+## Why dashboard 404s happened (and why this repo fixes them)
 
-## What you get
+The previous Vercel deployment served a **static** `dashboard.html` from `public/` / `dist-static` with **no serverless `/api/*` functions**.  
+The dashboard client calls same-origin `/api/overview`, `/api/graph`, … — those returned **HTTP 404**, so every panel showed:
 
-- **Landing** (`/`) — SynapseX cinematic marketing page.
-- **Dashboard** (`/dashboard`) — Catena personal causal health twin: overview, causal graph,
-  agent swarm, draft/verify cascade, counterfactual simulator, privacy/ZK attestations, and
-  domain panels (medications, nutrition, environment, clinician brief, ingestion, SaaS).
-- **API** (`/api/*`) — 19 routes implemented as plain TypeScript functions in
-  `src/lib/vaidyam/api.ts`, dispatched by a tiny dependency-free router
-  (`src/lib/vaidyam/router.ts`) — no Hono, no Cloudflare bindings.
-- **PostgreSQL** — twin registry + observation / graph snapshot tables via Drizzle ORM (local
-  Postgres or Supabase).
+> Could not load live data. HTTP 404 on /overview
+
+This codebase is a **pure Next.js** app:
+
+- Landing: `/` (App Router)
+- Dashboard: `/dashboard` (App Router shell + static JS panels)
+- **Every** Catena endpoint is a real Next.js Route Handler under `src/app/api/**`
+- Explicit routes for each panel **plus** a catch-all, so Vercel cannot miss `/api/*`
+- No Cloudflare Workers, no Hono, no `outputDirectory: dist-static`, no static HTML shadowing routes
 
 ## Quick start
 
@@ -29,74 +26,67 @@ npx drizzle-kit push
 npm run dev
 ```
 
-Open <http://localhost:3000> and <http://localhost:3000/dashboard>.
+Open http://localhost:3000 and http://localhost:3000/dashboard.
 
-## Deploy: Vercel (app) + Supabase (database) — both free tier
+## Deploy on Vercel (free tier)
 
-1. **Database** — create a free [Supabase](https://supabase.com) project → Settings →
-   Database → Connection string → copy the **URI** (session pooler, port 5432 or 6543).
-2. **Import** this repository into [Vercel](https://vercel.com) → Framework Preset: **Next.js**
-   (auto-detected).
-3. **Environment variables** — in the Vercel project settings, add:
-   - `DATABASE_URL` = the Supabase Postgres URI (**required**)
-   - Everything else in `.env.example` is optional — copy it as a starting point.
-4. **Push the schema** once, from your machine, pointed at the Supabase database:
+1. Import this repo into Vercel — Framework Preset: **Next.js** (auto).
+2. **Do not** set a custom Output Directory. Leave Build Command as `next build` (see `vercel.json`).
+3. Environment variables:
+   - `DATABASE_URL` — Postgres URI (optional but recommended; Supabase session pooler works)
+   - Optional: `USDA_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `NVIDIA_NIM_API_KEY`, `SUPABASE_*`, etc. (see `.env.example`)
+4. Push schema once against the remote DB:
    ```bash
-   DATABASE_URL="<your supabase uri>" npx drizzle-kit push
+   DATABASE_URL="<uri>" npx drizzle-kit push
    ```
-5. **Deploy.** Then verify:
-   - `GET /api/health` → `{ ok: true, app: "catena", ... }`
-   - `/dashboard` → the Twin Overview loads live data immediately (no 404s on `/overview`,
-     `/graph`, `/swarm`, `/cascade`, `/counterfactual`, `/environment`, `/medications`,
-     `/nutrition`, `/zk/*`, `/public-health`, `/memory`, `/clinician-brief`, `/ingestion`,
-     `/literature`, or `/saas`).
+5. Deploy, then verify:
+   - `GET /api/health` → `{ "ok": true, "app": "catena", "host": "nextjs", ... }`
+   - `GET /api/overview` → `{ "ok": true, "data": { "kpis": [...] }, "provenance": [...] }`
+   - `/dashboard` loads live panels (no 404s)
 
-No Cloudflare Pages, Workers, wrangler, or static `dist-static` build target is used or required.
+## API surface (all dynamic)
 
-## Environment variables
+| Method | Path | Panel |
+|--------|------|--------|
+| GET | `/api/health` | live chip / probe |
+| GET | `/api/overview` | Twin Overview |
+| GET | `/api/graph` | Causal graph |
+| POST | `/api/swarm` | Agent swarm |
+| GET | `/api/cascade` | Draft/verify cascade |
+| POST | `/api/counterfactual` | Counterfactual sim |
+| GET | `/api/counterfactual/levers` | CF levers |
+| GET | `/api/environment` | Environment |
+| GET | `/api/medications` | Medications |
+| GET | `/api/nutrition` | Nutrition |
+| GET/POST | `/api/zk/*` | Privacy / ZK |
+| GET | `/api/public-health` | Public health DP |
+| GET | `/api/memory` | Memory / quantization |
+| GET | `/api/clinician-brief` | Clinician brief |
+| GET | `/api/ingestion` | Ingestion |
+| GET | `/api/literature` | Literature |
+| GET | `/api/saas` | SaaS surfaces |
 
-See [`.env.example`](./.env.example) for the full, documented list. Only `DATABASE_URL` is
-required. Every other key (Supabase REST, USDA, GROQ, NVIDIA NIM, OpenRouter, generic OpenAI
-proxy) is optional — the API composes free, CORS-open, keyless upstreams (Open-Meteo, openFDA,
-Europe PMC, disease.sh) with deterministic fallbacks, and always labels which mode each panel is
-in via the provenance strip at the top of the dashboard.
+Live free upstreams (Open-Meteo, openFDA, Europe PMC, disease.sh, …) power panels when reachable; deterministic fallbacks only engage when an upstream fails, and the provenance strip labels the mode.
 
 ## Architecture
 
 ```
-src/lib/vaidyam/            ← Catena engine: sources, twin, swarm, privacy, counterfactuals…
-src/lib/vaidyam/router.ts   ← Dependency-free MiniRouter (replaces Hono)
-src/lib/vaidyam/api.ts      ← All 19 Catena API routes (plain TS functions)
-src/app/api/[[...route]]    ← Next.js catch-all Route Handler that dispatches into api.ts
-src/app/api/health          ← Unified platform + dashboard health check (DB + providers)
-src/app/page.tsx            ← SynapseX landing page
-src/app/dashboard/page.tsx  ← Catena dashboard shell
-public/static/              ← Dashboard/landing CSS + client JS (no build step required)
-src/db/schema.ts            ← Drizzle tables for twin persistence (Postgres / Supabase)
+src/app/page.tsx                 Landing (SynapseX)
+src/app/dashboard/page.tsx       Dashboard shell
+src/app/api/*/route.ts           Explicit Catena endpoints
+src/app/api/[...route]/route.ts Catch-all dispatcher
+src/lib/vaidyam/api.ts           All business handlers (MiniRouter)
+src/lib/vaidyam/dispatch.ts      Shared Next.js → MiniRouter bridge
+src/db/schema.ts                 Drizzle tables (twins, observations, …)
+public/static/dash/*.js          Dashboard client (calls /api/*)
 ```
 
-## Dashboard API contract
-
-The dashboard client (`public/static/dash/core.js`) resolves its API base in this order:
-`?api=` override → `<meta name="catena-api-base">` → `window.CATENA_API_BASE` → remembered
-`localStorage` override → same-origin `/api`. On this Next.js build, same-origin `/api` always
-answers — every panel (Overview, Graph, Swarm, Cascade, Counterfactual, Privacy/ZK, Environment,
-Medications, Nutrition, Clinician Brief, Ingestion, SaaS) is backed by a real serverless route, so
-the "no Catena API reachable" / "no `/api` worker" error from the old static-hosting build cannot
-occur here.
-
-## Local database
+## Local validation
 
 ```bash
-psql postgresql://postgres:postgres@127.0.0.1:5432/app_db -c "select 1"
-npx drizzle-kit push
+npx next typegen
+npx tsc --noEmit
+npm run build
+curl -s localhost:3000/api/health
+curl -s localhost:3000/api/overview | head
 ```
-
-## Removed from the original repo
-
-This rebuild intentionally removes every Cloudflare/Hono-era artifact from the upstream project:
-`wrangler.jsonc`, `.dev.vars*`, `ecosystem.config.cjs`, `vite*.config.ts`, `dist-static/`,
-`src/index.tsx` / `src/renderer.tsx` (Hono JSX Cloudflare Worker entry), the top-level
-`api/[[...route]].ts` Cloudflare Pages Function, the legacy `src/api/index.ts` Hono app, and the
-`hono` / `hono/vercel` npm dependency itself. All business logic (causal graph, swarm, privacy,
-counterfactuals, live data sources) is preserved unchanged in `src/lib/vaidyam/`.

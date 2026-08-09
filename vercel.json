@@ -1,6 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
+  "buildCommand": "next build",
+  "installCommand": "npm install",
   "headers": [
     {
       "source": "/static/(.*)",
@@ -17,6 +19,10 @@
         {
           "key": "Cache-Control",
           "value": "no-store"
+        },
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
         }
       ]
     },
@@ -28,5 +34,9 @@
         { "key": "X-Frame-Options", "value": "SAMEORIGIN" }
       ]
     }
+  ],
+  "rewrites": [
+    { "source": "/dashboard.html", "destination": "/dashboard" },
+    { "source": "/index.html", "destination": "/" }
   ]
 }

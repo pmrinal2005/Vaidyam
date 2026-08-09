@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export const metadata: Metadata = {
   title: "Catena — Personal Causal Health Twin",
@@ -15,8 +16,8 @@ export const viewport: Viewport = {
 };
 
 /**
- * Catena dashboard shell — ported from Vaidyam public/dashboard.html.
- * All panels talk to same-origin /api/* (Next.js route handlers).
+ * Catena dashboard shell.
+ * All panels talk to same-origin /api/* Next.js route handlers (dynamic data).
  */
 export default function DashboardPage() {
   return (

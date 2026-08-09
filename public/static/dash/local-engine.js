@@ -1,27 +1,26 @@
 /**
- * Local-engine stub for Next.js / Vercel hosts.
- *
- * The original Catena static deploy ran the full Hono API inside the browser
- * when no /api worker existed. This Next.js port always mounts /api/* server-
- * side, so the real engine is unnecessary. core.js still probes for
- * window.Catena.localEngine as a last-resort fallback — we register a thin
- * proxy that forwards to same-origin /api so a transient probe failure can
- * still recover without a 404 on this script.
+ * Local-engine fallback for Catena dashboard.
+ * On Next.js / Vercel the real API is same-origin /api/* — this stub only
+ * re-forwards so a transient probe miss cannot blank the whole dashboard.
  */
 (function () {
   "use strict";
   var C = (window.Catena = window.Catena || {});
-
   C.localEngine = {
     mode: "next-proxy",
     fetch: function (path, init) {
-      // path is already "/api/..." from core.js
-      var url = path.charAt(0) === "/" ? path : "/api/" + path;
+      var url = String(path || "");
+      if (url.indexOf("http") === 0) {
+        /* absolute — leave alone */
+      } else if (url.charAt(0) !== "/") {
+        url = "/api/" + url;
+      } else if (url.indexOf("/api") !== 0) {
+        url = "/api" + url;
+      }
       return fetch(url, init || {});
     },
   };
-
   try {
-    console.info("[catena] local-engine: next-proxy ready (server /api is primary)");
+    console.info("[catena] local-engine: next-proxy ready");
   } catch (_) {}
 })();
