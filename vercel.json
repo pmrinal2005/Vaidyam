@@ -3,6 +3,9 @@
   "framework": "nextjs",
   "buildCommand": "next build",
   "installCommand": "npm install",
+  "outputDirectory": null,
+  "cleanUrls": true,
+  "trailingSlash": false,
   "headers": [
     {
       "source": "/static/(.*)",
