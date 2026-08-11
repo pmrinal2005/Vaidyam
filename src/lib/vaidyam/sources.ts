@@ -134,6 +134,98 @@ export function geoFromRequest(req: Request, fallback?: { lat?: number; lon?: nu
   return { lat: 28.6139, lon: 77.209, city: 'New Delhi', region: 'Delhi', country: 'IN', live: false }
 }
 
+/**
+ * ROOT-CAUSE FIX — geo/country desync between panels.
+ *
+ * `geoFromRequest` above resolves *coordinates* from the browser (accurate,
+ * device GPS/Wi-Fi fix) but resolves *place names* (city/region/country)
+ * separately from IP-derived edge headers. Those two sources can legitimately
+ * disagree — mobile carrier NAT, corporate VPNs, satellite ISPs and Vercel's
+ * own edge network routinely exit through an IP registered in a different
+ * country than the device's physical GPS fix. The dashboard then showed a
+ * correctly detected city (from GPS) next to country-scoped data — public
+ * health, the location chip's country field, etc. — resolved from the
+ * mismatched IP country (which on this platform's outbound network normally
+ * resolves to the US), independent of where the visitor actually is.
+ *
+ * The fix: every panel already shares one `twinContext()` → one `GeoCtx`. We
+ * make that single object internally consistent by reverse-geocoding the
+ * EXACT coordinates that drive weather/AQI, so city + region + country can
+ * never point at two different places again. IP headers remain only a
+ * fast synchronous fallback if the reverse-geocode network call fails.
+ */
+const REVERSE_GEO_CACHE = new Map<string, { at: number; value: { city: string; region: string; country: string } }>()
+const REVERSE_GEO_TTL = 30 * 60_000
+
+async function reverseGeocode(
+  lat: number,
+  lon: number,
+  prov: Provenance[]
+): Promise<{ city: string; region: string; country: string } | null> {
+  const key = `${lat.toFixed(2)},${lon.toFixed(2)}`
+  const hit = REVERSE_GEO_CACHE.get(key)
+  if (hit && Date.now() - hit.at < REVERSE_GEO_TTL) return hit.value
+
+  const bdc = await safeJson<any>(
+    `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`,
+    'BigDataCloud (reverse geocode)',
+    prov,
+    5000
+  )
+  if (bdc && (bdc.countryCode || bdc.locality || bdc.city)) {
+    const value = {
+      city: String(bdc.locality || bdc.city || bdc.principalSubdivision || ''),
+      region: String(bdc.principalSubdivision || ''),
+      country: String(bdc.countryCode || '').toUpperCase()
+    }
+    if (value.city || value.country) {
+      REVERSE_GEO_CACHE.set(key, { at: Date.now(), value })
+      return value
+    }
+  }
+
+  // Independent second provider so a single upstream outage can't silently
+  // strand geo resolution back on a possibly-mismatched IP header.
+  const nom = await safeJson<any>(
+    `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=jsonv2&zoom=10&addressdetails=1`,
+    'Nominatim (reverse geocode)',
+    prov,
+    5000
+  )
+  const addr = nom?.address
+  if (addr) {
+    const value = {
+      city: String(addr.city || addr.town || addr.village || addr.municipality || addr.county || ''),
+      region: String(addr.state || addr.region || ''),
+      country: String(addr.country_code || '').toUpperCase()
+    }
+    if (value.city || value.country) {
+      REVERSE_GEO_CACHE.set(key, { at: Date.now(), value })
+      return value
+    }
+  }
+  return null
+}
+
+/**
+ * Resolves the authoritative, internally-consistent geo context for a
+ * request: same lat/lon as `geoFromRequest`, but city/region/country are
+ * always derived from THOSE coordinates (falling back to the IP-header
+ * values only when both reverse-geocode providers are unreachable).
+ */
+export async function resolveGeo(base: GeoCtx, prov: Provenance[]): Promise<GeoCtx> {
+  const rg = await reverseGeocode(base.lat, base.lon, prov)
+  if (rg) {
+    return {
+      ...base,
+      city: rg.city || base.city || 'Your area',
+      region: rg.region || base.region,
+      country: rg.country || base.country
+    }
+  }
+  return base
+}
+
 /* ── Open-Meteo weather (no key) ── */
 export type WeatherOut = {
   temperature: number
@@ -507,14 +599,17 @@ export type PublicHealthOut = {
 }
 
 export async function fetchPublicHealth(country: string, prov: Provenance[]): Promise<PublicHealthOut> {
-  const j = await safeJson<any>(
-    `https://disease.sh/v3/covid-19/countries/${encodeURIComponent(country || 'IN')}?strict=false`,
-    'disease.sh (population health)',
-    prov
-  )
-  if (j?.cases) {
+  const trimmed = (country || '').trim()
+  // No hard-coded nation default: an unresolved country (every geo provider
+  // failed) queries disease.sh's own global aggregate instead of silently
+  // assuming a specific country the visitor may not be in.
+  const url = trimmed
+    ? `https://disease.sh/v3/covid-19/countries/${encodeURIComponent(trimmed)}?strict=false`
+    : `https://disease.sh/v3/covid-19/all`
+  const j = await safeJson<any>(url, 'disease.sh (population health)', prov)
+  if (j && (j.cases || j.population)) {
     return {
-      country: String(j.country || country),
+      country: String(j.country || trimmed || 'Global'),
       cases: Number(j.cases || 0),
       todayCases: Number(j.todayCases || 0),
       active: Number(j.active || 0),
@@ -524,10 +619,10 @@ export async function fetchPublicHealth(country: string, prov: Provenance[]): Pr
       live: true
     }
   }
-  const rng = seeded('ph', country)
+  const rng = seeded('ph', trimmed || 'global')
   const pop = Math.round(clamp(gauss(rng, 4.5e7, 2e7), 1e6, 1.4e9))
   return {
-    country: country || 'Region',
+    country: trimmed || 'Global',
     cases: Math.round(pop * 0.03),
     todayCases: Math.round(clamp(gauss(rng, 240, 200), 0, 5000)),
     active: Math.round(pop * 0.0008),

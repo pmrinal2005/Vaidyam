@@ -98,7 +98,15 @@
         if (C.chart && typeof C.chart.bind === "function") C.chart.bind(root);
         else if (typeof C.bindTips === "function") C.bindTips(root);
         var sub = C.$("#user-sub");
-        if (sub && env.data && env.data.graphStats) sub.textContent = "graph " + env.data.graphStats.version;
+        if (sub && env.data) {
+          var loc = env.data.location;
+          var bits = [];
+          if (env.data.graphStats) bits.push("graph " + env.data.graphStats.version);
+          if (loc && (loc.city || loc.country)) {
+            bits.push([loc.city, loc.country].filter(Boolean).join(", ") + (loc.live ? "" : " (approx)"));
+          }
+          if (bits.length) sub.textContent = bits.join(" · ");
+        }
         if (!o.silent) C.$("#dash-main").scrollTop = 0;
       })
       .catch(function (err) {

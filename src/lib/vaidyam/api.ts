@@ -10,6 +10,7 @@ import { MiniRouter, type ApiContext } from './router'
 import type { Bindings, Envelope, Provenance } from './types'
 import {
   geoFromRequest,
+  resolveGeo,
   fetchAir,
   fetchWeather,
   fetchFdaSignal,
@@ -58,13 +59,21 @@ function userId(c: ApiContext<Bindings>): string {
 /** Shared twin context: live env → vitals → graph. Cached per user/hour. */
 async function twinContext(c: ApiContext<Bindings>) {
   const uid = userId(c)
-  const geo = geoFromRequest(c.req.raw, {
+  // Coordinates first (cache key + upstream calls only need lat/lon, which
+  // `geoFromRequest` already resolves synchronously from the browser fix or
+  // edge headers). Place names (city/region/country) are resolved from those
+  // SAME coordinates below, inside the cached closure, so every panel that
+  // reads `ctx.geo` — overview, environment, public-health, clinician-brief,
+  // etc. — agrees on one location instead of mixing GPS coordinates with a
+  // possibly different IP-inferred country.
+  const baseGeo = geoFromRequest(c.req.raw, {
     lat: c.req.query('lat') ? Number(c.req.query('lat')) : undefined,
     lon: c.req.query('lon') ? Number(c.req.query('lon')) : undefined
   })
-  const key = `twin:${uid}:${geo.lat.toFixed(2)}:${geo.lon.toFixed(2)}:${new Date().toISOString().slice(0, 13)}`
+  const key = `twin:${uid}:${baseGeo.lat.toFixed(2)}:${baseGeo.lon.toFixed(2)}:${new Date().toISOString().slice(0, 13)}`
   return cached(key, async () => {
     const prov: Provenance[] = []
+    const geo = await resolveGeo(baseGeo, prov)
     const [air, weather] = await Promise.all([fetchAir(geo, prov), fetchWeather(geo, prov)])
     if (supabaseConfigured(c.env)) {
       await sbSelect(c.env, 'observations', `select=day&user_id=eq.${uid}&order=day.desc&limit=1`, prov)
@@ -668,7 +677,10 @@ api.get('/public-health', async (c: ApiContext<Bindings>) => {
   const epsilon = clamp(Number(c.req.query('epsilon') || 1), 0.1, 8)
   const cohort = Math.round(clamp(Number(c.req.query('cohort') || 1284), 50, 500000))
   const dp = dpAggregate(ctx.vitals, ctx.uid, epsilon, cohort)
-  const ph = await fetchPublicHealth(ctx.geo.country || 'IN', prov)
+  // No hard-coded country bias: when the twin's country is genuinely unknown
+  // (both the GPS fix and every geo provider failed), fetchPublicHealth falls
+  // back to a global aggregate instead of assuming any single nation.
+  const ph = await fetchPublicHealth(ctx.geo.country || '', prov)
 
   // Cohort-level environment↔symptom signal, all contributions noised locally.
   const rounds = Array.from({ length: 12 }, (_, i) => {
