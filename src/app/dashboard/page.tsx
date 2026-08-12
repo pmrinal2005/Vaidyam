@@ -6,9 +6,9 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export const metadata: Metadata = {
-  title: "Catena — Personal Causal Health Twin",
+  title: "Vaidyam — Your Personal Causal Health Twin",
   description:
-    "Catena builds a continuously-updating causal model of an individual and reasons across medication, sleep, environment, mental health and nutrition — with zero-knowledge attestations and differentially-private aggregation.",
+    "Vaidyam builds a continuously-updating causal knowledge graph of you and reasons across medication, sleep, environment, mental health and nutrition — via a free multi-agent AI swarm, with zero-knowledge attestations and differentially-private aggregation.",
   robots: { index: false, follow: false },
 };
 
@@ -25,7 +25,7 @@ export const viewport: Viewport = {
 const THEME_BOOT = `(function(){try{var k="catena-theme";var s=null;try{s=localStorage.getItem(k)}catch(e){}var t=(s==="light"||s==="dark")?s:((window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches)?"light":"dark");var r=document.documentElement;r.setAttribute("data-theme",t);r.setAttribute("data-dash","1");r.style.colorScheme=t;var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute("content",t==="light"?"#eef2f8":"#07080a")}catch(e){try{document.documentElement.setAttribute("data-theme","dark");document.documentElement.setAttribute("data-dash","1")}catch(_){}}})();`;
 
 /**
- * Catena dashboard shell.
+ * Vaidyam dashboard shell — your personal causal health twin, live.
  * All panels talk to same-origin /api/* Next.js route handlers (dynamic data).
  */
 export default function DashboardPage() {
@@ -58,7 +58,7 @@ export default function DashboardPage() {
 
       <div id="dash-shell" className="dash-shell">
         <aside id="dash-rail" className="dash-rail" aria-label="Dashboard sections">
-          <Link className="rail-logo" href="/" aria-label="Back to Catena landing page">
+          <Link className="rail-logo" href="/" aria-label="Back to Vaidyam landing page">
             <span className="rail-logo-mark" aria-hidden="true" />
           </Link>
           <nav id="rail-nav" className="rail-nav" aria-label="Views" />
@@ -100,7 +100,7 @@ export default function DashboardPage() {
 
             <div className="topbar-title">
               <p className="topbar-eyebrow" id="topbar-eyebrow">
-                Catena
+                Vaidyam
               </p>
               <h1 className="topbar-heading" id="topbar-heading">
                 Overview

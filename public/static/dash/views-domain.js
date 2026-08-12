@@ -1,7 +1,7 @@
 /* Views: Environmental Exposure, Medication, Nutrition, Clinician Brief. */
 (function () {
   "use strict";
-  var C = (window.Catena = window.Catena || {});
+  var C = (window.Vaidyam = window.Vaidyam || {});
   var V = (C.views = C.views || {});
   var Ch = C.chart;
 

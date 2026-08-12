@@ -1,7 +1,7 @@
 /* Views: Causal Graph (HippoRAG/GraphRAG/LightRAG), Agent Swarm (MoA), Inference Cascade, Counterfactual engine. */
 (function () {
   "use strict";
-  var C = (window.Catena = window.Catena || {});
+  var C = (window.Vaidyam = window.Vaidyam || {});
   var V = (C.views = C.views || {});
   var Ch = C.chart;
 
@@ -192,7 +192,7 @@
             '<div class="chip-row mt12"><span class="chip is-active">vote: ' + C.esc(coord.vote) + "</span>" +
             '<span class="chip">provider: ' + C.esc(coord.provider) + "</span>" +
             '<span class="chip">tokens: ' + coord.tokens + "</span></div>" +
-            '<p class="card-note mt8">Decision-support only — Catena does not diagnose; high-stakes outputs recommend clinician review.</p>'
+            '<p class="card-note mt8">Decision-support only — Vaidyam does not diagnose; high-stakes outputs recommend clinician review.</p>'
         }) + "</div>";
       }
 
@@ -260,7 +260,7 @@
         icon: "bi-cash-coin",
         body:
           '<div class="stat-strip">' +
-          C.statCell("Catena cost", "$" + C.fmt.num(d.totals.costUsd, 2)) +
+          C.statCell("Vaidyam cost", "$" + C.fmt.num(d.totals.costUsd, 2)) +
           C.statCell("Baseline cost", "$" + C.fmt.num(d.totals.baselineCostUsd * 1000, 3) + "/1k") +
           C.statCell("Savings", C.fmt.num(d.totals.savings, 0), "%") +
           C.statCell("Acceptance", C.fmt.num(d.totals.acceptance * 100, 1), "%") +

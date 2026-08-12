@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   Catena chart engine — dependency-free responsive SVG.
+   Vaidyam chart engine — dependency-free responsive SVG.
 
    WHY THIS FILE WAS REWRITTEN
    ---------------------------
@@ -11,7 +11,7 @@
    theme even after the body/theme bug was fixed.
 
    Every colour is therefore resolved at *render* time from
-   `Catena.theme.palette()` (a cached snapshot of the CSS custom properties on
+   `Vaidyam.theme.palette()` (a cached snapshot of the CSS custom properties on
    <html data-theme>). A theme flip invalidates that cache and re-renders, so
    axis labels, gridlines, gauge digits and graph edges all re-tint.
 
@@ -31,7 +31,7 @@
 (function () {
   "use strict";
 
-  var C = (window.Catena = window.Catena || {});
+  var C = (window.Vaidyam = window.Vaidyam || {});
   var Ch = (C.chart = {});
   var uid = 0;
   function nid(p) { uid += 1; return (p || "cx") + uid; }
@@ -906,7 +906,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 (function () {
   "use strict";
-  var C = (window.Catena = window.Catena || {});
+  var C = (window.Vaidyam = window.Vaidyam || {});
   var Ch = C.chart;
 
   /* Models live in the previous IIFE's closure and are reached through the

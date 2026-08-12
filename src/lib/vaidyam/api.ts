@@ -1,5 +1,5 @@
 /**
- * Catena edge API — all dashboard data originates here.
+ * Vaidyam edge API — all dashboard data originates here.
  *
  * Every route composes live free-tier sources (Open-Meteo, openFDA, PubMed /
  * Europe PMC, USDA, disease.sh) with the twin's causal-graph reasoning and
@@ -831,7 +831,7 @@ api.get('/clinician-brief', async (c: ApiContext<Bindings>) => {
           }/100 (${risks.slice().sort((a, b) => b.score - a.score)[0].horizon}).`
         ],
         citations,
-        disclaimer: 'Decision-support only. Catena does not diagnose; all outputs require clinician review.'
+        disclaimer: 'Decision-support only. Vaidyam does not diagnose; all outputs require clinician review.'
       },
       prov,
       started

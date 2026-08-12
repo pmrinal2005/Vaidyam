@@ -159,10 +159,10 @@ export default function App() {
                 className="font-serif text-[16px] uppercase tracking-widest text-black leading-[20px] mb-6 text-left w-[240px] cursor-text"
                 style={{ y: yElement, filter: filterText, opacity: textOpacity }}
               >
-                JOIN THE PRIVATE BETA OF CATENA. WHETHER YOU TRACK MEDICATION, SLEEP OR AIR QUALITY —
+                JOIN THE PRIVATE BETA OF VAIDYAM. WHETHER YOU TRACK MEDICATION, SLEEP OR AIR QUALITY —
               </motion.p>
               <motion.div className="flex gap-0 pointer-events-auto items-center" style={{ y: yElement, filter: filterText, opacity: textOpacity }}>
-                {/* Both CTAs enter the Catena dashboard. */}
+                {/* Both CTAs enter the Vaidyam dashboard. */}
                 <a
                   href="/dashboard"
                   data-enter-dashboard
@@ -173,7 +173,7 @@ export default function App() {
                 <a
                   href="/dashboard"
                   data-enter-dashboard
-                  aria-label="Open the Catena causal health dashboard"
+                  aria-label="Open the Vaidyam causal health dashboard"
                   className="bg-black hover:bg-black/90 transition-colors w-[46px] h-[46px] flex items-center justify-center rounded-[50%] text-white -ml-2 z-0 no-underline"
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="ml-1">

@@ -93,7 +93,7 @@ async function chat(
       headers: {
         'content-type': 'application/json',
         authorization: `Bearer ${cfg.key}`,
-        ...(cfg.id === 'openrouter' ? { 'HTTP-Referer': 'https://catena.health', 'X-Title': 'Catena' } : {})
+        ...(cfg.id === 'openrouter' ? { 'HTTP-Referer': 'https://vaidyam.health', 'X-Title': 'Vaidyam' } : {})
       },
       body: JSON.stringify({ model, messages, max_tokens: maxTokens, temperature: 0.35 })
     })
@@ -252,7 +252,7 @@ export async function runSwarm(
           [
             {
               role: 'system',
-              content: `You are Catena's ${def.name}. Reason ONLY over the supplied causal-graph context. Answer in <=45 words, clinical but plain. Never invent numbers.`
+              content: `You are Vaidyam's ${def.name}. Reason ONLY over the supplied causal-graph context. Answer in <=45 words, clinical but plain. Never invent numbers.`
             },
             { role: 'user', content: `${opts.contextBrief}\n\nUser question: ${opts.query}\n\nGive your domain verdict and the causal edge you relied on.` }
           ],
@@ -310,7 +310,7 @@ export async function runSwarm(
         {
           role: 'system',
           content:
-            "You are Catena's Preventive-Care Coordinator. You receive five specialist agent outputs as auxiliary information and must synthesise ONE recommendation in <=70 words. Cite the dominant causal chain. Never give a diagnosis; recommend clinician review when stakes are high."
+            "You are Vaidyam's Preventive-Care Coordinator. You receive five specialist agent outputs as auxiliary information and must synthesise ONE recommendation in <=70 words. Cite the dominant causal chain. Never give a diagnosis; recommend clinician review when stakes are high."
         },
         {
           role: 'user',

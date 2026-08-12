@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Catena dashboard — semantic dual-theme design system
+   Vaidyam dashboard — semantic dual-theme design system
    ==========================================================================
 
    ROOT-CAUSE NOTE (invisible-text bug)
@@ -24,7 +24,7 @@
       strokes and hairlines are tokens too, so cards keep their edges in both
       themes.
    4. Chart internals that live inside SVG attributes (and so cannot be reached
-      by CSS) read the same tokens at runtime through `Catena.theme.palette()`
+      by CSS) read the same tokens at runtime through `Vaidyam.theme.palette()`
       in dash/core.js.
    ========================================================================== */
 
@@ -100,7 +100,7 @@
   --rose-wash: rgba(255, 143, 163, 0.09);
   --rose-line: rgba(255, 143, 163, 0.3);
 
-  /* Chart-only tokens (mirrored by Catena.theme.palette()) */
+  /* Chart-only tokens (mirrored by Vaidyam.theme.palette()) */
   --chart-grid: rgba(255, 255, 255, 0.055);
   --chart-grid-2: rgba(255, 255, 255, 0.09);
   --chart-axis: rgba(244, 246, 248, 0.62);

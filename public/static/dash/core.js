@@ -1,8 +1,8 @@
-/* Catena dashboard core — state, API client, formatting, DOM helpers. */
+/* Vaidyam dashboard core — state, API client, formatting, DOM helpers. */
 (function () {
   "use strict";
 
-  var C = (window.Catena = window.Catena || {});
+  var C = (window.Vaidyam = window.Vaidyam || {});
 
   /* ══════════════════════════════════════════════════════════════════════
      THEME RUNTIME
@@ -280,7 +280,7 @@
       })
       .then(function (j) {
         // Guard against an SPA fallback returning index.html with
-        // a 200: only an actual Catena health envelope counts as a live base.
+        // a 200: only an actual Vaidyam health envelope counts as a live base.
         if (!j || j.app !== "catena") throw new Error("not a catena api");
         return base;
       })
@@ -379,7 +379,7 @@
     return C.resolveApi().then(function (base) {
       if (!base) {
         throw new Error(
-          "No Catena API reachable at same-origin /api. " +
+          "No Vaidyam API reachable at same-origin /api. " +
           "This app must be deployed as Next.js (not a static host). " +
           "On Vercel: Framework Preset = Next.js, Output Directory EMPTY, " +
           "Build Command = next build. Or pass ?api=<origin>/api."
@@ -681,7 +681,7 @@
       '<p class="kpi-value">' + (o.display != null ? o.display : C.fmt.num(o.value, o.digits != null ? o.digits : 0)) +
       (o.unit ? "<small>" + C.esc(o.unit) + "</small>" : "") + "</p>" +
       '<div class="kpi-foot"><div class="kpi-spark">' +
-      (window.Catena.chart && o.spark ? window.Catena.chart.spark(o.spark, { color: color }) : "") +
+      (window.Vaidyam.chart && o.spark ? window.Vaidyam.chart.spark(o.spark, { color: color }) : "") +
       "</div>" + (o.deltaHtml != null ? o.deltaHtml : (o.delta != null ? C.deltaHtml(o.delta, o.invert) : "")) +
       "</div></div>"
     );

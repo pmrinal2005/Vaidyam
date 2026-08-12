@@ -1,5 +1,5 @@
 /**
- * Local-engine fallback for Catena dashboard.
+ * Local-engine fallback for Vaidyam dashboard.
  *
  * On Next.js / Vercel the real API is same-origin /api/* — this stub re-forwards
  * so a transient /health probe miss cannot blank the whole dashboard. It is NOT
@@ -7,7 +7,7 @@
  */
 (function () {
   "use strict";
-  var C = (window.Catena = window.Catena || {});
+  var C = (window.Vaidyam = window.Vaidyam || {});
 
   function normalize(path) {
     var url = String(path || "");

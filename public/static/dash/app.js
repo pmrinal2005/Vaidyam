@@ -1,7 +1,7 @@
-/* Catena dashboard router — nav construction, view lifecycle, delegated events. */
+/* Vaidyam dashboard router — nav construction, view lifecycle, delegated events. */
 (function () {
   "use strict";
-  var C = (window.Catena = window.Catena || {});
+  var C = (window.Vaidyam = window.Vaidyam || {});
   var V = C.views || {};
 
   // Rail order. Grouped: twin → reasoning → domains → surfaces.
@@ -48,7 +48,7 @@
     if (v) {
       var h = C.$("#topbar-heading");
       if (h) h.textContent = v.title || v.label;
-      document.title = "Catena — " + (v.title || v.label);
+      document.title = "Vaidyam — " + (v.title || v.label);
     }
   }
 
