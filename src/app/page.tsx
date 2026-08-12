@@ -74,12 +74,12 @@ export default function HomePage() {
               className="logo-pill"
               id="logo-pill"
               data-scroll-top
-              aria-label="SynapseX — back to top"
+              aria-label="Catena — back to top"
             >
               <svg aria-hidden="true" focusable="false">
                 <use href="#logo-mark" />
               </svg>
-              <span>SynapseX</span>
+              <span>Catena</span>
             </button>
 
             <nav className="menu-pill" id="menu-pill" aria-label="Primary">
@@ -99,7 +99,7 @@ export default function HomePage() {
               </button>
               <div className="menu-links" id="menu-links">
                 <a href="#cinematic-section" data-nav-link>
-                  About
+                  Architecture
                 </a>
                 <a href="#stats-section" data-nav-link>
                   Metrics
@@ -127,12 +127,12 @@ export default function HomePage() {
               className="logo-pill-m"
               id="logo-pill-m"
               data-scroll-top
-              aria-label="SynapseX — back to top"
+              aria-label="Catena — back to top"
             >
               <svg aria-hidden="true" focusable="false">
                 <use href="#logo-mark" />
               </svg>
-              <span>SynapseX</span>
+              <span>Catena</span>
             </button>
 
             <nav className="menu-pill-m" id="menu-pill-m" aria-label="Primary mobile">
@@ -152,7 +152,7 @@ export default function HomePage() {
               </button>
               <div className="menu-links-m" id="menu-links-m">
                 <a href="#cinematic-section" data-nav-link>
-                  About
+                  Architecture
                 </a>
                 <a href="#stats-section" data-nav-link>
                   Metrics
@@ -182,18 +182,18 @@ export default function HomePage() {
             <div className="hero-grid">
               <div className="hero-col-left">
                 <h1 className="hero-title" id="hero-heading">
-                  <span className="visually-hidden">Brain And Body</span>
+                  <span className="visually-hidden">Causal Intelligence</span>
                   <span
                     className="scramble-line"
                     data-scramble-in
-                    data-text="Brain"
+                    data-text="Causal"
                     data-delay="100"
                     aria-hidden="true"
                   />
                   <span
                     className="scramble-line"
                     data-scramble-in
-                    data-text="And Body"
+                    data-text="Intelligence"
                     data-delay="300"
                     aria-hidden="true"
                   />
@@ -204,12 +204,13 @@ export default function HomePage() {
 
             <div className="hero-grid-bottom">
               <p className="hero-desc" id="hero-desc">
-                Built at the intersection of neuroscience and artificial intelligence. SynapseX
-                continuously maps neural pathways, cognitive load, and physiological states into a
-                single adaptive intelligence layer.
+                Catena builds a continuously-updating causal knowledge graph of you — medication,
+                sleep, environment, mental health, nutrition and finance — and reasons across every
+                domain at once, through a free-tier multi-agent AI swarm, at near-zero cost and
+                near-zero latency, without your raw data ever leaving your twin.
               </p>
               <div className="hero-col-right">
-                <p className="visually-hidden">One Network</p>
+                <p className="visually-hidden">One Twin</p>
                 <p className="hero-title right" aria-hidden="true">
                   <span
                     className="scramble-line"
@@ -220,7 +221,7 @@ export default function HomePage() {
                   <span
                     className="scramble-line"
                     data-scramble-in
-                    data-text="Network"
+                    data-text="Twin"
                     data-delay="400"
                   />
                 </p>
@@ -232,10 +233,11 @@ export default function HomePage() {
         <section id="cinematic-section" aria-labelledby="cinematic-heading">
           <div id="cinematic-inner">
             <h2 id="cinematic-heading">
-              A neural-AI interface built on the architecture of the human nervous system. SynapseX
-              translates synaptic activity into computational intelligence. Every signal becomes
-              measurable, structured, and visible. It continuously reconstructs internal state as a
-              dynamic neural map. Biological noise is filtered into actionable cognitive patterns.
+              Not a data lake — a causal graph. Catena speculates answers on Groq's free LPU tier,
+              verifies only the uncertain spans on NVIDIA NIM, and majority-votes across a swarm of
+              free OpenRouter models when the stakes are high. Every medication, sleep pattern and
+              air-quality reading becomes a causal edge, never a raw record. Privacy, depth and
+              zero-dollar cost — satisfied simultaneously, not traded off.
             </h2>
           </div>
         </section>
@@ -252,7 +254,7 @@ export default function HomePage() {
 
       <section id="reveal-section" aria-labelledby="reveal-heading">
         <h2 id="reveal-heading" className="visually-hidden">
-          Master the Elements — 2K26 collection reveal
+          Inside Catena — the causal engine behind your twin
         </h2>
         <div id="reveal-root" data-mounted="true">
           <RevealStage />
@@ -260,9 +262,9 @@ export default function HomePage() {
       </section>
 
       <footer id="main-footer">
-        <p>SynapseX — Neural Intelligence Layer</p>
+        <p>Catena — Personal Causal Health Twin</p>
         <p>
-          <span id="footer-year" /> · All signals reserved
+          <span id="footer-year" /> · Zero raw data ever leaves your twin
         </p>
       </footer>
 

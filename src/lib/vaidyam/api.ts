@@ -753,7 +753,7 @@ api.get('/memory', async (c: ApiContext<Bindings>) => {
           tables: ['entities', 'causal_edges', 'observations', 'graph_embeddings', 'communities', 'attestations', 'dp_aggregates']
         },
         matryoshka: {
-          note: 'One embedding serves multiple compute budgets — leading dimensions are truncatable.',
+          note: 'Matryoshka Representation Learning — one embedding serves multiple compute budgets — leading dimensions are truncatable.',
           profiles: q.matryoshkaDims.map((m) => ({
             ...m,
             useCase: m.dim >= 320 ? 'Deep clinical review' : m.dim >= 192 ? 'Standard graph query' : 'Mobile quick check-in'

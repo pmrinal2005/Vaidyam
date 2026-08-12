@@ -58,7 +58,7 @@ export default function DashboardPage() {
 
       <div id="dash-shell" className="dash-shell">
         <aside id="dash-rail" className="dash-rail" aria-label="Dashboard sections">
-          <Link className="rail-logo" href="/" aria-label="Back to SynapseX landing page">
+          <Link className="rail-logo" href="/" aria-label="Back to Catena landing page">
             <span className="rail-logo-mark" aria-hidden="true" />
           </Link>
           <nav id="rail-nav" className="rail-nav" aria-label="Views" />

@@ -5,12 +5,12 @@ import { useRef } from 'react';
 import OrbitImages from './OrbitImages';
 
 const orbitImagesData = [
-  "https://aspect-slam-99684872.figma.site/_components/v2/79eebc3801de595030a9e7fa875de4a77ede4f07/3644e7bae80f5a458c3c087d313204cc67952aff.3644e7ba.png",
-  "https://aspect-slam-99684872.figma.site/_components/v2/79eebc3801de595030a9e7fa875de4a77ede4f07/85346ab4899007b001b3df5d5da04a9d0e4e9ea4.85346ab4.png",
-  "https://aspect-slam-99684872.figma.site/_components/v2/79eebc3801de595030a9e7fa875de4a77ede4f07/ff5f9bb7c566be349d20a775a29eab9ff591311b.ff5f9bb7.png",
-  "https://aspect-slam-99684872.figma.site/_components/v2/79eebc3801de595030a9e7fa875de4a77ede4f07/22e1b6bbc71c4977a49b6bbd991ed75be483cf0e.22e1b6bb.png",
-  "https://aspect-slam-99684872.figma.site/_components/v2/79eebc3801de595030a9e7fa875de4a77ede4f07/874d9530b2ec45092a4c71a1fd74564599b7e3c8.874d9530.png",
-  "https://aspect-slam-99684872.figma.site/_components/v2/79eebc3801de595030a9e7fa875de4a77ede4f07/2adc4a2c178d6aaa68dda80fc42e7628372522d1.2adc4a2c.png",
+  "/images/orbit-1.jpg",
+  "/images/orbit-2.jpg",
+  "/images/orbit-3.jpg",
+  "/images/orbit-4.jpg",
+  "/images/orbit-5.jpg",
+  "/images/orbit-6.jpg",
 ];
 
 /**
@@ -129,10 +129,10 @@ export default function RevealStage() {
                 style={{ filter: filterText, opacity: textOpacity, WebkitFontSmoothing: 'antialiased', WebkitBackfaceVisibility: 'hidden', transform: 'translateZ(0)' }}
               >
                 <div className="flex items-baseline text-black leading-none mb-1">
-                  <span className="font-serif text-[45px] md:text-[55px] italic tracking-tight text-black">M</span>
-                  <span className="font-serif text-[45px] md:text-[55px] tracking-tight text-black">aster the Elements</span>
+                  <span className="font-serif text-[45px] md:text-[55px] italic tracking-tight text-black">R</span>
+                  <span className="font-serif text-[45px] md:text-[55px] tracking-tight text-black">eveal the Why</span>
                 </div>
-                <span className="font-sans text-[28px] md:text-[36px] tracking-tight text-black mt-[-5px]">embrace</span>
+                <span className="font-sans text-[28px] md:text-[36px] tracking-tight text-black mt-[-5px]">decoded, causally</span>
               </motion.div>
             </div>
 
@@ -141,9 +141,9 @@ export default function RevealStage() {
               className="absolute top-32 right-[calc(6vw+150px)] md:right-[214px] flex flex-col items-start text-left pointer-events-auto cursor-text"
               style={{ y: yElement, filter: filterText, opacity: textOpacity }}
             >
-              <span className="font-serif text-[40px] leading-none mb-3 text-black">2K26</span>
+              <span className="font-serif text-[40px] leading-none mb-3 text-black">$0</span>
               <span className="font-serif text-[16px] uppercase tracking-widest text-black leading-[20px] text-left">
-                JOIN AN EXCLUSIVE<br />COMMUNITY
+                ZERO-DOLLAR<br />TECH STACK
               </span>
             </motion.div>
 
@@ -152,8 +152,8 @@ export default function RevealStage() {
               className="absolute bottom-8 left-8 md:bottom-16 md:left-16 flex flex-col items-start text-black pointer-events-auto cursor-text"
               style={{ y: yElement, filter: filterText, opacity: textOpacity }}
             >
-              <span className="font-serif text-[40px] leading-none mb-1 text-black">0651</span>
-              <span className="font-serif text-[16px] uppercase tracking-widest text-black">COLLECTION</span>
+              <span className="font-serif text-[40px] leading-none mb-1 text-black">11+</span>
+              <span className="font-serif text-[16px] uppercase tracking-widest text-black">RESEARCH FOUNDATIONS</span>
             </motion.div>
 
             <div id="reveal-cta-block" className="absolute bottom-16 right-[6vw] md:right-[10vw] flex flex-col items-start z-10 pointer-events-auto">
@@ -161,7 +161,7 @@ export default function RevealStage() {
                 className="font-serif text-[16px] uppercase tracking-widest text-black leading-[20px] mb-6 text-left w-[240px] cursor-text"
                 style={{ y: yElement, filter: filterText, opacity: textOpacity }}
               >
-                JOIN AN EXCLUSIVE COMMUNITY OF SAILORS. WHETHER YOU CRAVE THE THRILL OF THE OPEN
+                JOIN THE PRIVATE BETA OF CATENA. WHETHER YOU TRACK MEDICATION, SLEEP OR AIR QUALITY —
               </motion.p>
               <motion.div className="flex gap-0 pointer-events-auto items-center" style={{ y: yElement, filter: filterText, opacity: textOpacity }}>
                 {/* Both CTAs enter the Catena dashboard. */}
@@ -170,7 +170,7 @@ export default function RevealStage() {
                   data-enter-dashboard
                   className="bg-black hover:bg-black/90 transition-colors text-white rounded-[40px] px-8 py-3.5 font-serif tracking-[0.1em] uppercase text-[12px] md:text-[14px] z-10 inline-block no-underline"
                 >
-                  BUY COLLECTION
+                  ENTER YOUR TWIN
                 </a>
                 <a
                   href="/dashboard"

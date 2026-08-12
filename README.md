@@ -96,7 +96,7 @@ Live free upstreams (Open-Meteo, openFDA, Europe PMC, disease.sh, …) power pan
 ## Architecture
 
 ```
-src/app/page.tsx                 Landing (SynapseX)
+src/app/page.tsx                 Landing (Catena)
 src/app/dashboard/page.tsx       Dashboard shell
 src/app/api/*/route.ts           Explicit Catena endpoints
 src/app/api/[...route]/route.ts Catch-all dispatcher

@@ -1,5 +1,5 @@
 /* ==========================================================================
-   SynapseX — landing page behaviour
+   Catena — landing page behaviour
    - scroll-scrubbed background video (blur + zoom)
    - scramble-in / scramble-out hero type
    - cinematic 3D parallax paragraph
@@ -14,12 +14,12 @@
   var NBSP = "\u00A0";
 
   var statsData = [
-    { title: "NEURAL ACTIVITY",   value: "7.2M",  footer: "LIVE SIGNALS INTERPRETED",     details: ["Continuous temporal synapsing", "1024 parallel telemetry streams", "Dynamic feed classification active"] },
-    { title: "PREDICTIVE MODEL",  value: "93%",   footer: "FORECAST ACCURACY RATE",       details: ["Reinforced gradient mapping", "Low latency neural resolution", "Adaptive signal feedback system"] },
-    { title: "EPOCH LATENCY",     value: "0.4ms", footer: "CYCLE RESPONSE SPEED",         details: ["Hardware accelerated pipeline", "Direct metal shader execution", "Temporal synchronization loop"] },
-    { title: "COGNITIVE STREAMS", value: "14.8M", footer: "REAL-TIME MODEL COHERENCE",    details: ["Distributed synapse projection", "High-fidelity entropy filtering", "Sub-millisecond state coherence"] },
-    { title: "SYNAPSE DEPTH",     value: "128L",  footer: "MODEL RESOLUTION DEPTH",       details: ["Deep feed-forward mapping", "Transformer-based neural routing", "Multi-dimensional pattern projection"] },
-    { title: "SIGNAL INTEGRITY",  value: "99.9%", footer: "NOISE REDUCTION RATIO",        details: ["Advanced wave-let filtering", "Dynamic heuristic balancing", "Contextual signal amplification"] }
+    { title: "INFERENCE COST",     value: "$0.00", footer: "PER-QUERY COMPUTE COST",        details: ["Draft-verify cascade across free tiers", "Groq LPU + NVIDIA NIM + OpenRouter", "No per-token billing, ever"] },
+    { title: "DRAFT LATENCY",      value: "<300ms", footer: "GROQ LPU RESPONSE TIME",        details: ["EAGLE feature-level speculation", "Medusa parallel-head fallback", "Most check-ins never leave step one"] },
+    { title: "SPECIALIST SWARM",   value: "6",      footer: "MIXTURE-OF-AGENTS DOMAINS",     details: ["Medication · Sleep · Environment", "Mental health · Nutrition · Coordinator", "Agent-Forest majority voting"] },
+    { title: "RESEARCH FOUNDATION", value: "11+",   footer: "CITED ARCHITECTURES",           details: ["Speculative decoding, GraphRAG, HippoRAG", "LightRAG, MoA, FrugalGPT, Matryoshka", "Peer-reviewed, not hand-waved"] },
+    { title: "MEMORY FOOTPRINT",   value: "32x",    footer: "BINARY QUANTIZATION FACTOR",    details: ["Binary first-pass retrieval", "int8 re-ranking recovers recall", "Fits inside a free-tier Postgres"] },
+    { title: "RAW DATA EXPOSED",   value: "0",      footer: "RECORDS LEAVING YOUR TWIN",     details: ["Zero-knowledge health attestations", "Differentially-private aggregation", "Only proofs cross the wire, never data"] }
   ];
 
   /* ── Elements ── */

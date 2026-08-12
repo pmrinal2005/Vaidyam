@@ -3,13 +3,13 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SynapseX — Brain And Body, One Network",
+  title: "Catena — Your Personal Causal Health Twin, Reasoning at Zero Cost",
   description:
-    "SynapseX / Catena — a neural-AI interface and personal causal health twin that reasons across medication, sleep, environment, mental health and nutrition.",
+    "Catena builds a continuously-updating causal knowledge graph of you — medication, sleep, environment, mental health and nutrition — reasoned over by a free-tier multi-agent AI swarm, and provable to insurers, employers and clinicians with zero-knowledge attestations, without ever exposing your raw data.",
   openGraph: {
-    title: "SynapseX — Brain And Body, One Network",
+    title: "Catena — Your Personal Causal Health Twin, Reasoning at Zero Cost",
     description:
-      "A neural-AI interface that translates synaptic activity into computational intelligence.",
+      "Draft-verify speculative inference, multi-agent swarm consensus and zero-knowledge privacy — near-large-model reasoning at near-zero cost and near-zero latency.",
     type: "website",
   },
 };

@@ -5,7 +5,7 @@ import './index.css';
 
 /**
  * Mounts the "opening reveal" motion-graphic section as an isolated React
- * island inside the otherwise static SynapseX page. Nothing outside
+ * island inside the otherwise static Catena page. Nothing outside
  * #reveal-root is touched, so every pre-existing section keeps working
  * exactly as before even if this bundle fails to load.
  */

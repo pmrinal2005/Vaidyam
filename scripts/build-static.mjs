@@ -1,6 +1,6 @@
 /**
  * build-static.mjs
- * Produces `dist-static/` — a pure static bundle of the SynapseX site.
+ * Produces `dist-static/` — a pure static bundle of the Catena site.
  *
  * Used by Vercel (alongside the /api Edge Function) and usable by any static
  * host. No dependencies beyond Node's stdlib.
