@@ -132,7 +132,7 @@ export default function RevealStage() {
                   <span className="font-serif text-[45px] md:text-[55px] italic tracking-tight text-black">R</span>
                   <span className="font-serif text-[45px] md:text-[55px] tracking-tight text-black">eveal the Why</span>
                 </div>
-                <span className="font-sans text-[28px] md:text-[36px] tracking-tight text-black mt-[-5px]">decoded, causally</span>
+                <span className="font-sans text-[28px] md:text-[36px] tracking-tight text-black mt-[-5px]">before symptoms even start</span>
               </motion.div>
             </div>
 
@@ -141,9 +141,9 @@ export default function RevealStage() {
               className="absolute top-32 right-[calc(6vw+150px)] md:right-[214px] flex flex-col items-start text-left pointer-events-auto cursor-text"
               style={{ y: yElement, filter: filterText, opacity: textOpacity }}
             >
-              <span className="font-serif text-[40px] leading-none mb-3 text-black">$0</span>
+              <span className="font-serif text-[40px] leading-none mb-3 text-black">₹0</span>
               <span className="font-serif text-[16px] uppercase tracking-widest text-black leading-[20px] text-left">
-                ZERO-DOLLAR<br />TECH STACK
+                ZERO-RUPEE<br />TECH STACK
               </span>
             </motion.div>
 
@@ -153,7 +153,7 @@ export default function RevealStage() {
               style={{ y: yElement, filter: filterText, opacity: textOpacity }}
             >
               <span className="font-serif text-[40px] leading-none mb-1 text-black">11+</span>
-              <span className="font-serif text-[16px] uppercase tracking-widest text-black">RESEARCH FOUNDATIONS</span>
+              <span className="font-serif text-[16px] uppercase tracking-widest text-black">PEER-REVIEWED FOUNDATIONS</span>
             </motion.div>
 
             <div id="reveal-cta-block" className="absolute bottom-16 right-[6vw] md:right-[10vw] flex flex-col items-start z-10 pointer-events-auto">
@@ -161,10 +161,10 @@ export default function RevealStage() {
                 className="font-serif text-[16px] uppercase tracking-widest text-black leading-[20px] mb-6 text-left w-[240px] cursor-text"
                 style={{ y: yElement, filter: filterText, opacity: textOpacity }}
               >
-                JOIN THE PRIVATE BETA OF CATENA. WHETHER YOU TRACK MEDICATION, SLEEP OR AIR QUALITY —
+                YOUR BODY IS ALREADY TALKING. VAIDYAM IS BUILT TO LISTEN — TO YOUR MEDS, YOUR SLEEP, YOUR AIR —
               </motion.p>
               <motion.div className="flex gap-0 pointer-events-auto items-center" style={{ y: yElement, filter: filterText, opacity: textOpacity }}>
-                {/* Both CTAs enter the Catena dashboard. */}
+                {/* Both CTAs enter the Vaidyam dashboard. */}
                 <a
                   href="/dashboard"
                   data-enter-dashboard
@@ -175,7 +175,7 @@ export default function RevealStage() {
                 <a
                   href="/dashboard"
                   data-enter-dashboard
-                  aria-label="Open the Catena causal health dashboard"
+                  aria-label="Open the Vaidyam causal health dashboard"
                   className="bg-black hover:bg-black/90 transition-colors w-[46px] h-[46px] flex items-center justify-center rounded-[50%] text-white -ml-2 z-0 no-underline"
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="ml-1">

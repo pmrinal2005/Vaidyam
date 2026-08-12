@@ -3,13 +3,13 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Catena — Your Personal Causal Health Twin, Reasoning at Zero Cost",
+  title: "Vaidyam — The AI That Sees Why You're Sick Before You Do",
   description:
-    "Catena builds a continuously-updating causal knowledge graph of you — medication, sleep, environment, mental health and nutrition — reasoned over by a free-tier multi-agent AI swarm, and provable to insurers, employers and clinicians with zero-knowledge attestations, without ever exposing your raw data.",
+    "Vaidyam grows a living causal graph of you — medication, sleep, air you breathe, mood, food — reasoned over by a free multi-agent AI swarm in under a second, and provable to insurers, employers and doctors with zero-knowledge proofs, without your raw data ever leaving your twin.",
   openGraph: {
-    title: "Catena — Your Personal Causal Health Twin, Reasoning at Zero Cost",
+    title: "Vaidyam — The AI That Sees Why You're Sick Before You Do",
     description:
-      "Draft-verify speculative inference, multi-agent swarm consensus and zero-knowledge privacy — near-large-model reasoning at near-zero cost and near-zero latency.",
+      "Draft-verify speculative inference, multi-agent swarm consensus and zero-knowledge privacy — near-instant, near-large-model health reasoning at zero cost per query.",
     type: "website",
   },
 };

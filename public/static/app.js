@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Catena — landing page behaviour
+   Vaidyam — landing page behaviour
    - scroll-scrubbed background video (blur + zoom)
    - scramble-in / scramble-out hero type
    - cinematic 3D parallax paragraph
@@ -14,12 +14,12 @@
   var NBSP = "\u00A0";
 
   var statsData = [
-    { title: "INFERENCE COST",     value: "$0.00", footer: "PER-QUERY COMPUTE COST",        details: ["Draft-verify cascade across free tiers", "Groq LPU + NVIDIA NIM + OpenRouter", "No per-token billing, ever"] },
-    { title: "DRAFT LATENCY",      value: "<300ms", footer: "GROQ LPU RESPONSE TIME",        details: ["EAGLE feature-level speculation", "Medusa parallel-head fallback", "Most check-ins never leave step one"] },
-    { title: "SPECIALIST SWARM",   value: "6",      footer: "MIXTURE-OF-AGENTS DOMAINS",     details: ["Medication · Sleep · Environment", "Mental health · Nutrition · Coordinator", "Agent-Forest majority voting"] },
-    { title: "RESEARCH FOUNDATION", value: "11+",   footer: "CITED ARCHITECTURES",           details: ["Speculative decoding, GraphRAG, HippoRAG", "LightRAG, MoA, FrugalGPT, Matryoshka", "Peer-reviewed, not hand-waved"] },
-    { title: "MEMORY FOOTPRINT",   value: "32x",    footer: "BINARY QUANTIZATION FACTOR",    details: ["Binary first-pass retrieval", "int8 re-ranking recovers recall", "Fits inside a free-tier Postgres"] },
-    { title: "RAW DATA EXPOSED",   value: "0",      footer: "RECORDS LEAVING YOUR TWIN",     details: ["Zero-knowledge health attestations", "Differentially-private aggregation", "Only proofs cross the wire, never data"] }
+    { title: "INFERENCE COST",      value: "₹0",     footer: "WHAT YOU PAY, PER QUESTION",        details: ["Draft-verify cascade across free tiers", "Groq LPU + NVIDIA NIM + OpenRouter", "No subscriptions, no token bills, ever"] },
+    { title: "DRAFT LATENCY",       value: "<300ms", footer: "TIME TO YOUR FIRST INSIGHT",         details: ["EAGLE feature-level speculation", "Medusa parallel-head fallback", "Most daily check-ins never leave step one"] },
+    { title: "SPECIALIST SWARM",    value: "6",      footer: "AI SPECIALISTS, WATCHING 24/7",      details: ["Medication · Sleep · Environment", "Mental health · Nutrition · Coordinator", "Agent-Forest majority voting on hard calls"] },
+    { title: "RESEARCH FOUNDATION", value: "11+",    footer: "PUBLISHED SCIENCE, NOT GUESSWORK",   details: ["Speculative decoding, GraphRAG, HippoRAG", "LightRAG, MoA, FrugalGPT, Matryoshka", "Peer-reviewed, stress-tested, real"] },
+    { title: "MEMORY FOOTPRINT",    value: "32×",    footer: "SMALLER TWIN, ZERO INSIGHT LOST",    details: ["Binary first-pass retrieval", "int8 re-ranking recovers full recall", "Your whole twin fits in a free-tier database"] },
+    { title: "RAW DATA EXPOSED",    value: "0",      footer: "RECORDS THAT EVER LEAVE YOUR TWIN",  details: ["Zero-knowledge health attestations", "Differentially-private aggregation only", "Proofs travel. Your data never does."] }
   ];
 
   /* ── Elements ── */

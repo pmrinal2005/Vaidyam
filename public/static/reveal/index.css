@@ -12,7 +12,7 @@
 
    Tailwind's Preflight is deliberately NOT imported: the host already ships an
    equivalent global reset, and Preflight would restyle the pre-existing
-   Catena sections.
+   Vaidyam sections.
    ========================================================================== */
 @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@300;400;500;600&family=Great+Vibes&display=swap');
 

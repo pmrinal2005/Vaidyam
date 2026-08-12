@@ -74,12 +74,12 @@ export default function HomePage() {
               className="logo-pill"
               id="logo-pill"
               data-scroll-top
-              aria-label="Catena — back to top"
+              aria-label="Vaidyam — back to top"
             >
               <svg aria-hidden="true" focusable="false">
                 <use href="#logo-mark" />
               </svg>
-              <span>Catena</span>
+              <span>Vaidyam</span>
             </button>
 
             <nav className="menu-pill" id="menu-pill" aria-label="Primary">
@@ -99,10 +99,10 @@ export default function HomePage() {
               </button>
               <div className="menu-links" id="menu-links">
                 <a href="#cinematic-section" data-nav-link>
-                  Architecture
+                  The Engine
                 </a>
                 <a href="#stats-section" data-nav-link>
-                  Metrics
+                  Proof, in Numbers
                 </a>
               </div>
             </nav>
@@ -113,10 +113,10 @@ export default function HomePage() {
             id="download-btn"
             href="/dashboard"
             data-enter-dashboard
-            aria-label="Open the Catena causal health dashboard"
+            aria-label="Open the Vaidyam causal health dashboard"
           >
-            <i className="bi bi-apple" aria-hidden="true" />
-            <span>Download</span>
+            <i className="bi bi-activity" aria-hidden="true" />
+            <span>Enter Your Twin</span>
           </a>
         </div>
 
@@ -127,12 +127,12 @@ export default function HomePage() {
               className="logo-pill-m"
               id="logo-pill-m"
               data-scroll-top
-              aria-label="Catena — back to top"
+              aria-label="Vaidyam — back to top"
             >
               <svg aria-hidden="true" focusable="false">
                 <use href="#logo-mark" />
               </svg>
-              <span>Catena</span>
+              <span>Vaidyam</span>
             </button>
 
             <nav className="menu-pill-m" id="menu-pill-m" aria-label="Primary mobile">
@@ -152,10 +152,10 @@ export default function HomePage() {
               </button>
               <div className="menu-links-m" id="menu-links-m">
                 <a href="#cinematic-section" data-nav-link>
-                  Architecture
+                  The Engine
                 </a>
                 <a href="#stats-section" data-nav-link>
-                  Metrics
+                  Proof, in Numbers
                 </a>
               </div>
             </nav>
@@ -166,10 +166,10 @@ export default function HomePage() {
             id="download-btn-m"
             href="/dashboard"
             data-enter-dashboard
-            aria-label="Open the Catena causal health dashboard"
+            aria-label="Open the Vaidyam causal health dashboard"
           >
-            <i className="bi bi-apple" aria-hidden="true" />
-            <span>Download</span>
+            <i className="bi bi-activity" aria-hidden="true" />
+            <span>Enter Your Twin</span>
           </a>
         </div>
       </header>
@@ -182,7 +182,7 @@ export default function HomePage() {
             <div className="hero-grid">
               <div className="hero-col-left">
                 <h1 className="hero-title" id="hero-heading">
-                  <span className="visually-hidden">Causal Intelligence</span>
+                  <span className="visually-hidden">Causal Foresight</span>
                   <span
                     className="scramble-line"
                     data-scramble-in
@@ -193,7 +193,7 @@ export default function HomePage() {
                   <span
                     className="scramble-line"
                     data-scramble-in
-                    data-text="Intelligence"
+                    data-text="Foresight"
                     data-delay="300"
                     aria-hidden="true"
                   />
@@ -204,10 +204,10 @@ export default function HomePage() {
 
             <div className="hero-grid-bottom">
               <p className="hero-desc" id="hero-desc">
-                Catena builds a continuously-updating causal knowledge graph of you — medication,
-                sleep, environment, mental health, nutrition and finance — and reasons across every
-                domain at once, through a free-tier multi-agent AI swarm, at near-zero cost and
-                near-zero latency, without your raw data ever leaving your twin.
+                Vaidyam grows a living causal graph of you — medication, sleep, the air you
+                breathe, your mood, your food — and reasons across every one of them at once,
+                through a free multi-agent AI swarm, in under a second, for less than a rupee,
+                without a single raw record ever leaving your twin.
               </p>
               <div className="hero-col-right">
                 <p className="visually-hidden">One Twin</p>
@@ -233,11 +233,12 @@ export default function HomePage() {
         <section id="cinematic-section" aria-labelledby="cinematic-heading">
           <div id="cinematic-inner">
             <h2 id="cinematic-heading">
-              Not a data lake — a causal graph. Catena speculates answers on Groq's free LPU tier,
-              verifies only the uncertain spans on NVIDIA NIM, and majority-votes across a swarm of
-              free OpenRouter models when the stakes are high. Every medication, sleep pattern and
-              air-quality reading becomes a causal edge, never a raw record. Privacy, depth and
-              zero-dollar cost — satisfied simultaneously, not traded off.
+              Not a data lake. A brain. Vaidyam drafts answers on Groq&apos;s free LPU tier in
+              milliseconds, sends only the uncertain parts to NVIDIA NIM for a second opinion,
+              and calls in a swarm of free OpenRouter models to vote when the stakes are real.
+              Every pill, every sleepless night, every polluted morning becomes a causal edge —
+              never a raw record sitting in someone else&apos;s server. Privacy, depth and
+              zero-cost reasoning, finally, all at once.
             </h2>
           </div>
         </section>
@@ -254,7 +255,7 @@ export default function HomePage() {
 
       <section id="reveal-section" aria-labelledby="reveal-heading">
         <h2 id="reveal-heading" className="visually-hidden">
-          Inside Catena — the causal engine behind your twin
+          Inside Vaidyam — the causal engine behind your twin
         </h2>
         <div id="reveal-root" data-mounted="true">
           <RevealStage />
@@ -262,7 +263,7 @@ export default function HomePage() {
       </section>
 
       <footer id="main-footer">
-        <p>Catena — Personal Causal Health Twin</p>
+        <p>Vaidyam — Your Personal Causal Health Twin</p>
         <p>
           <span id="footer-year" /> · Zero raw data ever leaves your twin
         </p>
