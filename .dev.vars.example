@@ -52,26 +52,11 @@ USDA_API_KEY=
 #            causal graph. Every panel still renders real numbers derived from
 #            the twin; the provenance strip reports "deterministic graph
 #            reasoner (no provider key)" and the live chip reads degraded.
-# ANY ONE of the four is enough. Resolution order is the order in
-# src/lib/inference.ts → providers(): groq → nim → openrouter → proxy.
+# Single provider: GroqCloud. Models: openai/gpt-oss-120b (primary draft) and
+# qwen/qwen3.6-27b (agentic/multi-call). Outbound calls are capped at 3/min.
 
-# GroqCloud LPU — drafts (fastest; generous free tier)
-#   https://console.groq.com/keys
+# GroqCloud — https://console.groq.com/keys
 GROQ_API_KEY=
-
-# NVIDIA NIM — verifier for divergent spans
-#   https://build.nvidia.com/  → "Get API Key"
-NVIDIA_NIM_API_KEY=
-
-# OpenRouter — Agent-Forest voting pool (has :free models)
-#   https://openrouter.ai/keys
-OPENROUTER_API_KEY=
-
-# OpenAI-compatible proxy (generic escape hatch; any OpenAI-shaped endpoint).
-# OPENAI_BASE_URL defaults to https://www.genspark.ai/api/llm_proxy/v1 when
-# unset. Set BOTH to use e.g. api.openai.com or a self-hosted vLLM.
-OPENAI_API_KEY=
-OPENAI_BASE_URL=
 
 
 # ───────────────────────────────────────────────────────────────────────────────

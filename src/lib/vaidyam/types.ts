@@ -5,10 +5,6 @@ export type Bindings = {
   SUPABASE_ANON_KEY?: string
   SUPABASE_SERVICE_KEY?: string
   GROQ_API_KEY?: string
-  NVIDIA_NIM_API_KEY?: string
-  OPENROUTER_API_KEY?: string
-  OPENAI_API_KEY?: string
-  OPENAI_BASE_URL?: string
   USDA_API_KEY?: string
   /** Present on Next.js / Drizzle hosts; unused by the pure edge path. */
   DATABASE_URL?: string
@@ -61,7 +57,7 @@ export type SwarmAgent = {
   name: string
   domain: string
   layer: number
-  provider: 'groq' | 'nim' | 'openrouter' | 'proxy' | 'local'
+  provider: 'groq' | 'local'
   model: string
   status: 'idle' | 'drafting' | 'verifying' | 'voting' | 'done'
   latencyMs: number

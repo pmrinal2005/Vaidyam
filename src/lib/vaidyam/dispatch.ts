@@ -6,10 +6,6 @@ import type { Bindings } from "@/lib/vaidyam/types";
 const ENV_KEYS = [
   "USDA_API_KEY",
   "GROQ_API_KEY",
-  "NVIDIA_NIM_API_KEY",
-  "OPENROUTER_API_KEY",
-  "OPENAI_API_KEY",
-  "OPENAI_BASE_URL",
   "SUPABASE_URL",
   "SUPABASE_ANON_KEY",
   "SUPABASE_SERVICE_KEY",

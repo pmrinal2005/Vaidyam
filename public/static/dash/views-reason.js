@@ -230,7 +230,7 @@
       var out = C.viewHead(
         "Layer 3 · draft-verify speculative cascade",
         "Inference Efficiency Cascade",
-        "A Groq LPU draft model speculates most of the answer using EAGLE-style feature-level speculation; the NVIDIA NIM 70B model verifies only divergent spans — not a full re-generation. Medusa-style parallel heads engage for multi-branch clinical reasoning, and OpenRouter supplies the Agent-Forest voting pool. A FrugalGPT router decides, per query, which stages actually run.",
+        "A GroqCloud gpt-oss-120b draft model speculates most of the answer using EAGLE-style feature-level speculation; the qwen3.6-27b agent model verifies only divergent spans — not a full re-generation. Medusa-style parallel heads engage for multi-branch clinical reasoning, and the same agent model supplies the Agent-Forest voting pool. A FrugalGPT router decides, per query, which stages actually run.",
         '<span class="badge good">acceptance ' + C.fmt.num(d.totals.acceptance * 100, 1) + "%</span>" +
         '<span class="badge info">' + d.totals.latencyMs + "ms end-to-end</span>"
       );

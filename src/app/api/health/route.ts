@@ -48,10 +48,6 @@ export async function GET() {
     const env = {
       USDA_API_KEY: process.env.USDA_API_KEY,
       GROQ_API_KEY: process.env.GROQ_API_KEY,
-      NVIDIA_NIM_API_KEY: process.env.NVIDIA_NIM_API_KEY,
-      OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
-      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
-      OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
       SUPABASE_URL: process.env.SUPABASE_URL,
       SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
       SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY,

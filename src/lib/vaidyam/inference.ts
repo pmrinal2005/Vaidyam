@@ -1,18 +1,24 @@
 /**
  * Layers 2–3 — Multi-Agent Swarm (MoA) + Draft-Verify Speculative Cascade.
  *
- * Provider order mirrors PART 5 of the architecture: Groq LPU drafts (EAGLE /
- * Medusa-style speculation), NVIDIA NIM verifies divergent spans, OpenRouter
- * supplies the Agent-Forest voting pool. A FrugalGPT-style router decides which
- * stages actually run. When no provider key is present the cascade still
- * executes against the platform LLM proxy, and if that is unavailable it falls
- * back to a deterministic local reasoner over the causal graph.
+ * Single provider: GroqCloud. Two models only —
+ *   - PRIMARY_MODEL  (openai/gpt-oss-120b): main single-shot reasoning (draft).
+ *   - AGENT_MODEL    (qwen/qwen3.6-27b):   agentic / multi-call work (verify,
+ *     coordinator synthesis, swarm votes).
+ * A hard rate limiter caps outbound Groq calls at 3 requests / minute. When the
+ * cap is hit, the key is absent, or the call fails, the cascade falls back to
+ * the deterministic local reasoner over the causal graph. All prompts are kept
+ * as short as possible and outputs are capped tightly to minimise token spend.
  */
 import type { Bindings, CascadeStage, CausalGraph, SwarmAgent } from './types'
 import { seeded, clamp, round, gauss } from './rand'
 import type { Vitals } from './twin'
 
-export type ProviderId = 'groq' | 'nim' | 'openrouter' | 'proxy'
+export type ProviderId = 'groq'
+
+// Groq models: primary reasoning vs. agentic multi-call tasks.
+export const PRIMARY_MODEL = 'openai/gpt-oss-120b'
+export const AGENT_MODEL = 'qwen/qwen3.6-27b'
 
 type ProviderCfg = {
   id: ProviderId
@@ -27,62 +33,53 @@ type ProviderCfg = {
 /**
  * ENV-SAFETY NOTE
  * ---------------
- * `env` may be `undefined` — `c.env` is absent when this same Hono app runs in
- * the browser local-engine fallback, and under local Next.js dev before
- * bindings exist. Dereferencing a key off `undefined` threw a
- * TypeError, which surfaced as a 500 on /health, /cascade, /swarm and /saas
- * instead of the intended "no key → deterministic reasoner" degradation.
+ * `env` may be `undefined` (no bindings yet / local-engine fallback). Never
+ * dereference a key off `undefined` — that surfaced as a 500 instead of the
+ * intended "no key → deterministic reasoner" degradation.
  */
 export function providers(env?: Bindings | null): ProviderCfg[] {
   const e = env || ({} as Bindings)
   return [
     {
       id: 'groq',
-      label: 'GroqCloud LPU',
+      label: 'GroqCloud',
       base: 'https://api.groq.com/openai/v1',
       key: e.GROQ_API_KEY,
-      draftModel: 'llama-3.1-8b-instant',
-      verifyModel: 'llama-3.3-70b-versatile',
-      voteModels: ['llama-3.1-8b-instant', 'gemma2-9b-it']
-    },
-    {
-      id: 'nim',
-      label: 'NVIDIA NIM',
-      base: 'https://integrate.api.nvidia.com/v1',
-      key: e.NVIDIA_NIM_API_KEY,
-      draftModel: 'meta/llama-3.1-8b-instruct',
-      verifyModel: 'meta/llama-3.3-70b-instruct',
-      voteModels: ['meta/llama-3.1-8b-instruct', 'mistralai/mistral-7b-instruct-v0.3']
-    },
-    {
-      id: 'openrouter',
-      label: 'OpenRouter',
-      base: 'https://openrouter.ai/api/v1',
-      key: e.OPENROUTER_API_KEY,
-      draftModel: 'meta-llama/llama-3.2-3b-instruct:free',
-      verifyModel: 'meta-llama/llama-3.3-70b-instruct:free',
-      voteModels: ['meta-llama/llama-3.2-3b-instruct:free', 'google/gemma-2-9b-it:free', 'qwen/qwen-2.5-7b-instruct:free']
-    },
-    {
-      id: 'proxy',
-      label: 'Platform LLM proxy',
-      base: e.OPENAI_BASE_URL || 'https://www.genspark.ai/api/llm_proxy/v1',
-      key: e.OPENAI_API_KEY,
-      draftModel: 'gpt-5-nano',
-      verifyModel: 'gpt-5-mini',
-      voteModels: ['gpt-5-nano', 'gpt-5-mini']
+      draftModel: PRIMARY_MODEL,
+      verifyModel: AGENT_MODEL,
+      voteModels: [AGENT_MODEL]
     }
   ]
 }
 
+/**
+ * Sliding-window rate limiter: at most 3 Groq requests per rolling 60s.
+ * Module-scoped so it applies across every call in a server instance.
+ */
+const RATE_MAX = 3
+const RATE_WINDOW_MS = 60_000
+const callTimes: number[] = []
+function rateOk(): boolean {
+  const now = Date.now()
+  while (callTimes.length && now - callTimes[0] > RATE_WINDOW_MS) callTimes.shift()
+  if (callTimes.length >= RATE_MAX) return false
+  callTimes.push(now)
+  return true
+}
+
+/**
+ * Token-efficient Groq chat call. `maxTokens` is kept minimal by callers;
+ * outputs are capped to exactly what each stage needs.
+ */
 async function chat(
   cfg: ProviderCfg,
   model: string,
   messages: { role: string; content: string }[],
-  maxTokens = 320,
+  maxTokens = 160,
   timeoutMs = 9000
 ): Promise<{ text: string; ms: number; tokensIn: number; tokensOut: number } | null> {
   if (!cfg.key) return null
+  if (!rateOk()) return null
   const started = Date.now()
   try {
     const ctrl = new AbortController()
@@ -92,10 +89,16 @@ async function chat(
       signal: ctrl.signal,
       headers: {
         'content-type': 'application/json',
-        authorization: `Bearer ${cfg.key}`,
-        ...(cfg.id === 'openrouter' ? { 'HTTP-Referer': 'https://vaidyam.health', 'X-Title': 'Vaidyam' } : {})
+        authorization: `Bearer ${cfg.key}`
       },
-      body: JSON.stringify({ model, messages, max_tokens: maxTokens, temperature: 0.35 })
+      body: JSON.stringify({
+        model,
+        messages,
+        max_tokens: maxTokens,
+        temperature: 0.3,
+        top_p: 0.9,
+        stream: false
+      })
     })
     clearTimeout(timer)
     if (!res.ok) return null
@@ -231,32 +234,33 @@ export async function runSwarm(
     useLive: boolean
   }
 ): Promise<{ agents: SwarmAgent[]; consensus: { vote: string; support: number; distribution: Record<string, number> }; live: boolean }> {
-  const provs = providers(env).filter((p) => p.key)
-  const primary = provs[0]
+  const cfg = providers(env).find((p) => p.key)
   const rng = seeded('swarm', opts.query, opts.vitals.length)
   let live = false
 
+  // Token budget under the 3-req/min cap: at most ONE live PRIMARY draft here
+  // (on the highest-confidence specialist) and ONE live AGENT-model synthesis
+  // below. Remaining specialists use the deterministic reasoner (no tokens).
   const layer1 = AGENT_DEFS.filter((a) => a.layer === 1)
+  const locals = layer1.map((def) => ({ def, local: localReason(def.id, opts.graph, opts.vitals, opts.ppr) }))
+  const leadIdx = locals.reduce((bi, cur, i, arr) => (cur.local.confidence > arr[bi].local.confidence ? i : bi), 0)
+
   const results = await Promise.all(
-    layer1.map(async (def, i) => {
-      const local = localReason(def.id, opts.graph, opts.vitals, opts.ppr)
+    locals.map(async ({ def, local }, i) => {
       let rationale = local.rationale
       let ms = Math.round(clamp(gauss(rng, 180, 60), 55, 620))
       let tokens = Math.round(clamp(gauss(rng, 140, 50), 40, 400))
 
-      if (opts.useLive && primary) {
-        const cfg = provs[i % provs.length]
+      // Only the lead specialist spends a live PRIMARY-model draft.
+      if (opts.useLive && cfg && i === leadIdx) {
         const res = await chat(
           cfg,
-          cfg.draftModel,
+          PRIMARY_MODEL,
           [
-            {
-              role: 'system',
-              content: `You are Vaidyam's ${def.name}. Reason ONLY over the supplied causal-graph context. Answer in <=45 words, clinical but plain. Never invent numbers.`
-            },
-            { role: 'user', content: `${opts.contextBrief}\n\nUser question: ${opts.query}\n\nGive your domain verdict and the causal edge you relied on.` }
+            { role: 'system', content: `Vaidyam ${def.name}. Use only the context. <=35 words. No invented numbers.` },
+            { role: 'user', content: `${opts.contextBrief}\nQ: ${opts.query}\nVerdict + the causal edge used.` }
           ],
-          170
+          120
         )
         if (res) {
           live = true
@@ -266,15 +270,13 @@ export async function runSwarm(
         }
       }
 
-      const provider = (provs[i % Math.max(1, provs.length)]?.id || 'groq') as SwarmAgent['provider']
-      const cfg = provs[i % Math.max(1, provs.length)]
       return {
         id: def.id,
         name: def.name,
         domain: def.domain,
         layer: 1,
-        provider: provider === 'proxy' ? 'groq' : provider,
-        model: cfg?.draftModel || 'llama-3.1-8b-instant (offline sim)',
+        provider: 'groq' as const,
+        model: i === leadIdx ? PRIMARY_MODEL : `${PRIMARY_MODEL} (local sim)`,
         status: 'done' as const,
         latencyMs: ms,
         tokens,
@@ -301,25 +303,25 @@ export async function runSwarm(
   const coordLocal = localReason(coordDef.id, opts.graph, opts.vitals, opts.ppr)
   let coordRationale = coordLocal.rationale
   let coordMs = Math.round(clamp(gauss(rng, 520, 160), 190, 1500))
-  if (opts.useLive && provs.length) {
-    const verifier = provs.find((p) => p.id === 'nim') || provs[0]
+  // Agentic synthesis uses the AGENT_MODEL (one live call, tight budget).
+  if (opts.useLive && cfg) {
     const res = await chat(
-      verifier,
-      verifier.verifyModel,
+      cfg,
+      AGENT_MODEL,
       [
         {
           role: 'system',
           content:
-            "You are Vaidyam's Preventive-Care Coordinator. You receive five specialist agent outputs as auxiliary information and must synthesise ONE recommendation in <=70 words. Cite the dominant causal chain. Never give a diagnosis; recommend clinician review when stakes are high."
+            'Vaidyam Coordinator. Synthesise ONE recommendation in <=45 words, cite the dominant causal chain. No diagnosis; advise clinician review if high stakes.'
         },
         {
           role: 'user',
-          content: `${opts.contextBrief}\n\nSpecialist outputs:\n${results
-            .map((r) => `- ${r.name} [${r.vote}]: ${r.rationale}`)
-            .join('\n')}\n\nSwarm ballot: ${JSON.stringify(distribution)}\nUser question: ${opts.query}`
+          content: `${opts.contextBrief}\nAgents: ${results
+            .map((r) => `${r.domain}:${r.vote}`)
+            .join(',')}\nBallot:${JSON.stringify(distribution)}\nQ:${opts.query}`
         }
       ],
-      260
+      160
     )
     if (res) {
       live = true
@@ -333,8 +335,8 @@ export async function runSwarm(
     name: coordDef.name,
     domain: coordDef.domain,
     layer: 2,
-    provider: 'nim',
-    model: (provs.find((p) => p.id === 'nim') || provs[0])?.verifyModel || 'llama-3.3-70b-versatile (offline sim)',
+    provider: 'groq',
+    model: AGENT_MODEL,
     status: 'done',
     latencyMs: coordMs,
     tokens: Math.round(clamp(gauss(rng, 260, 70), 90, 620)),
@@ -362,10 +364,7 @@ export function buildCascade(
   seedKey: string
 ): { stages: CascadeStage[]; totals: { latencyMs: number; costUsd: number; baselineCostUsd: number; savings: number; acceptance: number } } {
   const rng = seeded('cascade', seedKey)
-  const provs = providers(env)
-  const groq = provs.find((p) => p.id === 'groq')!
-  const nim = provs.find((p) => p.id === 'nim')!
-  const orr = provs.find((p) => p.id === 'openrouter')!
+  const groq = providers(env).find((p) => p.id === 'groq')!
 
   const acceptance = round(clamp(gauss(rng, route.highStakes ? 0.76 : 0.88, 0.05), 0.6, 0.97), 3)
   const divergent = Math.round(observed.draftTokens * (1 - acceptance))
@@ -387,7 +386,7 @@ export function buildCascade(
     {
       stage: 'Draft (EAGLE feature-level speculation)',
       provider: groq.label,
-      model: groq.draftModel,
+      model: PRIMARY_MODEL,
       role: 'draft',
       latencyMs: observed.draftMs,
       tokensIn: 620,
@@ -399,8 +398,8 @@ export function buildCascade(
     },
     {
       stage: 'Verify (divergent spans only)',
-      provider: nim.label,
-      model: nim.verifyModel,
+      provider: groq.label,
+      model: AGENT_MODEL,
       role: 'verify',
       latencyMs: route.escalateVerify ? observed.verifyMs : 0,
       tokensIn: route.escalateVerify ? divergent + 180 : 0,
@@ -415,7 +414,7 @@ export function buildCascade(
     {
       stage: 'Medusa parallel-head fallback',
       provider: groq.label,
-      model: `${groq.draftModel} · 4 heads`,
+      model: `${PRIMARY_MODEL} · 4 heads`,
       role: 'draft',
       latencyMs: route.escalateSwarm ? Math.round(observed.draftMs * 0.7) : 0,
       tokensIn: route.escalateSwarm ? 240 : 0,
@@ -429,8 +428,8 @@ export function buildCascade(
     },
     {
       stage: 'Agent-Forest vote',
-      provider: orr.label,
-      model: `${observed.agentCount} × ${orr.voteModels[0]}`,
+      provider: groq.label,
+      model: `${observed.agentCount} × ${AGENT_MODEL}`,
       role: 'vote',
       latencyMs: route.escalateSwarm ? Math.round(gauss(rng, 640, 140)) : 0,
       tokensIn: route.escalateSwarm ? observed.agentCount * 210 : 0,
