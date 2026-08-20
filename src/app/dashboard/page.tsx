@@ -175,6 +175,7 @@ export default function DashboardPage() {
       <Script src="/static/dash/views-reason.js" strategy="afterInteractive" />
       <Script src="/static/dash/views-domain.js" strategy="afterInteractive" />
       <Script src="/static/dash/views-privacy.js" strategy="afterInteractive" />
+      <Script src="/static/dash/views-voice.js" strategy="afterInteractive" />
       <Script src="/static/dash/app.js" strategy="afterInteractive" />
     </>
   );

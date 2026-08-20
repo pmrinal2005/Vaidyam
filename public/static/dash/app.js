@@ -6,13 +6,13 @@
 
   // Rail order. Grouped: twin → reasoning → domains → surfaces.
   var ORDER = [
-    "overview", "graph", "swarm", "cascade", "counterfactual",
+    "overview", "assistant", "graph", "swarm", "cascade", "counterfactual",
     "environment", "medication", "nutrition",
     "clinician", "privacy", "publichealth", "memory",
     "ingestion", "saas"
   ];
-  var TABS = ["overview", "graph", "swarm", "counterfactual", "environment", "privacy"];
-  var GROUP_AFTER = { counterfactual: true, nutrition: true, memory: true };
+  var TABS = ["overview", "assistant", "graph", "swarm", "counterfactual", "environment"];
+  var GROUP_AFTER = { assistant: true, counterfactual: true, nutrition: true, memory: true };
 
   function views() {
     return ORDER.filter(function (k) { return V[k]; });

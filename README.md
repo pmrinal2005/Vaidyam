@@ -370,6 +370,7 @@ All endpoints live under `/api/*`, are same-origin, and return a JSON
 | GET | `/api/ingestion` | Ingestion | Layer-0 pipeline throughput and source-feed provenance |
 | GET | `/api/literature` | Literature | Europe PMC / PubMed-mirrored literature relevant to the twin's graph |
 | GET | `/api/saas` | SaaS Surfaces | Modelled multi-sided business metrics (ARR, cost stack) |
+| POST | `/api/assistant` | AI Assistant | Voice-to-voice healthcare assistant — Groq Cloud proxy (`qwen/qwen3.6-27b`), health-only, short/low-token responses |
 | ANY | `/api/[...route]` | — | Catch-all dispatcher — guarantees no `/api/*` path can 404 |
 
 Every explicit route file (e.g. `src/app/api/overview/route.ts`) is a thin
@@ -417,11 +418,48 @@ friends) that:
    an inline boot script in `dashboard/page.tsx`, preventing a flash of
    unstyled/invisible content.
 
-Panels are grouped into four view modules by domain:
+Panels are grouped into five view modules by domain:
 `views-core.js` (Overview, Ingestion, SaaS), `views-domain.js` (Environment,
 Medications, Nutrition, Clinician Brief), `views-reason.js` (Causal Graph,
-Swarm, Cascade, Counterfactual), and `views-privacy.js` (ZK/Privacy, Public
-Health, Memory).
+Swarm, Cascade, Counterfactual), `views-privacy.js` (ZK/Privacy, Public
+Health, Memory), and `views-voice.js` (Healthcare AI Assistant).
+
+### Healthcare AI Assistant (dashboard view: `#assistant`)
+
+A **browser-native, voice-to-voice** health companion that lives as its own
+dashboard section (second item in the rail, `views-voice.js`). The entire
+audio pipeline runs client-side; only the transcribed text touches the server.
+
+**Pipeline**
+
+1. **Speech-to-Text (input)** — the browser-native **Web Speech API**
+   (`SpeechRecognition` / `webkitSpeechRecognition`) continuously transcribes
+   the user's spoken audio and finalizes the transcript on speech end.
+2. **Reasoning** — the transcript is POSTed to the same-origin
+   `/api/assistant` route, which proxies to **Groq Cloud** using
+   **`qwen/qwen3.6-27b`** (`temperature 0.6`, `top_p 0.95`,
+   `reasoning_effort "default"`). A short system prompt enforces a
+   **healthcare-only scope**, a warm tone, and short crisp answers, and appends
+   a lightweight medical disclaimer. The `GROQ_API_KEY` is read server-side
+   only and never exposed to the browser.
+3. **Text-to-Speech (output)** — the reply is spoken back with the
+   browser-native **`window.speechSynthesis`** API.
+
+**Animated visualizers** — an orb + status line reflect the state machine
+(`idle → Listening… → Thinking… → Speaking…`), so the user always knows what
+the assistant is doing.
+
+**Token frugality (Groq free tier)** — requests and responses are kept
+minimal: the system prompt is compact, only the **last ~3 exchanges** are
+forwarded as memory (each turn trimmed), `max_completion_tokens` is capped at
+**220**, and the model is instructed to answer in at most 3 short sentences.
+`<think>…</think>` reasoning spans are stripped before display/speech.
+
+**Scope guard & safety** — non-medical questions (coding, weather, trivia,
+etc.) are politely declined and redirected to health topics; every medical
+answer ends with *"general info, not a substitute for professional medical
+advice."* A typed-input fallback keeps the feature usable in browsers without
+Web Speech support and for accessibility.
 
 ---
 
