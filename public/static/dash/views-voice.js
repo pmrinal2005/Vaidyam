@@ -38,6 +38,33 @@
     });
   }
 
+  /* ── Reasoning/thinking scrubber (client-side safety net) ──
+   * The server already disables reasoning and strips <think> blocks, but this
+   * guarantees the chain-of-thought is NEVER shown on screen NOR read aloud,
+   * even for the degraded/typed paths or an unexpected upstream response.
+   * Handles well-formed pairs, an unclosed opener (truncated mid-thought),
+   * and a lone trailing close tag. */
+  function stripThinking(input) {
+    var s = typeof input === "string" ? input : "";
+    // 1) Well-formed reasoning pairs.
+    s = s.replace(/<think>[\s\S]*?<\/think>/gi, "");
+    s = s.replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, "");
+    s = s.replace(/<thought>[\s\S]*?<\/thought>/gi, "");
+    // 2) Unclosed opener → drop everything from it onward (nothing real follows).
+    var openIdx = s.search(/<(?:think|reasoning|thought)\b[^>]*>/i);
+    if (openIdx !== -1 && !/<\/(?:think|reasoning|thought)>/i.test(s.slice(openIdx))) {
+      s = s.slice(0, openIdx);
+    }
+    // 3) Lone trailing close tag → keep only what follows the final one.
+    var m, lastClose = -1, lastLen = 0;
+    var re = /<\/(?:think|reasoning|thought)>/gi;
+    while ((m = re.exec(s)) !== null) { lastClose = m.index; lastLen = m[0].length; }
+    if (lastClose !== -1) s = s.slice(lastClose + lastLen);
+    // 4) Scrub stray tags + collapse whitespace.
+    s = s.replace(/<\/?(?:think|reasoning|thought)\b[^>]*>/gi, "");
+    return s.replace(/\s+/g, " ").trim();
+  }
+
   /* ── DOM helpers scoped to this view ── */
   function el(id) { return document.getElementById(id); }
 
@@ -136,12 +163,18 @@
       .then(function (r) { return r.json().catch(function () { return { ok: false, error: "Bad response" }; }); })
       .then(function (j) {
         if (j && j.ok && j.reply) {
-          appendTurn("assistant", j.reply);
+          // Never surface or speak any reasoning/thinking that slipped through.
+          var clean = stripThinking(j.reply);
+          if (!clean) {
+            clean = "I couldn't generate a clear answer just now. Please try rephrasing your health question. " +
+                    "This is general info, not a substitute for professional medical advice.";
+          }
+          appendTurn("assistant", clean);
           if (j.usage) {
             var meta = el("va-usage");
             if (meta) meta.textContent = "tokens · in " + j.usage.in + " / out " + j.usage.out;
           }
-          speak(j.reply);
+          speak(clean);
         } else {
           var msg = (j && j.error) ? j.error : "I couldn't get a response. Please try again.";
           appendTurn("assistant", msg);
@@ -252,9 +285,18 @@
         icon: "bi-soundwave",
         body:
           '<div class="va-console">' +
-            '<div id="va-orb" class="va-orb" data-state="idle" aria-hidden="true">' +
+            '<div id="va-orb" class="va-orb va-face-orb" data-state="idle" role="img" ' +
+              'aria-label="Vaidyam assistant avatar">' +
               '<span class="va-ring"></span><span class="va-ring"></span><span class="va-ring"></span>' +
-              '<span class="va-core"><i class="bi bi-mic-fill"></i></span>' +
+              // Pure CSS/HTML smiley-face avatar (replaces the microphone icon).
+              // Facial expressions are driven entirely by the orb\'s data-state.
+              '<span class="va-face" aria-hidden="true">' +
+                '<span class="va-eyes">' +
+                  '<span class="va-eye va-eye-l"><span class="va-pupil"></span></span>' +
+                  '<span class="va-eye va-eye-r"><span class="va-pupil"></span></span>' +
+                "</span>" +
+                '<span class="va-mouth"></span>' +
+              "</span>" +
             "</div>" +
             '<p id="va-status" class="va-status" data-state="idle" role="status" aria-live="polite">' +
               "Tap the mic and ask a health question</p>" +

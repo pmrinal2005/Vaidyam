@@ -438,22 +438,44 @@ audio pipeline runs client-side; only the transcribed text touches the server.
 2. **Reasoning** — the transcript is POSTed to the same-origin
    `/api/assistant` route, which proxies to **Groq Cloud** using
    **`qwen/qwen3.6-27b`** (`temperature 0.6`, `top_p 0.95`,
-   `reasoning_effort "default"`). A short system prompt enforces a
-   **healthcare-only scope**, a warm tone, and short crisp answers, and appends
-   a lightweight medical disclaimer. The `GROQ_API_KEY` is read server-side
-   only and never exposed to the browser.
+   `reasoning_effort "none"`). A short system prompt enforces a
+   **healthcare-only scope**, a warm tone, and short crisp answers, forbids any
+   visible reasoning/thinking, and appends a lightweight medical disclaimer. The
+   `GROQ_API_KEY` is read server-side only and never exposed to the browser.
 3. **Text-to-Speech (output)** — the reply is spoken back with the
    browser-native **`window.speechSynthesis`** API.
 
-**Animated visualizers** — an orb + status line reflect the state machine
-(`idle → Listening… → Thinking… → Speaking…`), so the user always knows what
-the assistant is doing.
+**Animated CSS smiley-face avatar** — the central circular element is a
+pure-CSS/HTML smiley face (two eyes + a mouth, built only with `border-radius`,
+`transform`, `transitions` and `@keyframes` — no images/SVG/video). Its
+expression is driven entirely by the orb's `data-state` attribute, toggled by
+JavaScript across the state machine, alongside a status line
+(`idle → Listening… → Thinking… → Speaking…`) so the user always knows what the
+assistant is doing even while the API call is in flight:
+
+- **idle** — neutral gentle smile, subtle breathing + periodic blink.
+- **listening** — wide, softly pulsing eyes (alert/attentive) with an inviting smile.
+- **thinking** — pupils glance up/side-to-side, mouth becomes a small neutral
+  line, and the whole face floats + tilts to signal background processing.
+- **speaking** — the mouth opens/closes (lip-sync feel) while
+  `window.speechSynthesis` is active, with gentle expressive blinking.
+
+All transitions are smooth CSS; the animations respect
+`prefers-reduced-motion`.
 
 **Token frugality (Groq free tier)** — requests and responses are kept
 minimal: the system prompt is compact, only the **last ~3 exchanges** are
-forwarded as memory (each turn trimmed), `max_completion_tokens` is capped at
-**220**, and the model is instructed to answer in at most 3 short sentences.
-`<think>…</think>` reasoning spans are stripped before display/speech.
+forwarded as memory (each turn trimmed) and the model is instructed to answer in
+at most 3 short sentences. `max_completion_tokens` is **900** — deliberately
+higher than a naive cap because a reasoning model can emit a hidden `<think>`
+block first; too small a budget truncated the real answer mid-word. Combined
+with `reasoning_effort "none"`, replies stay short *and* complete.
+
+**No chain-of-thought ever reaches the user.** Reasoning is disabled at the
+source (`reasoning_effort "none"`), and as a defense-in-depth safety net both
+the server (`stripReasoning`) and the client (`stripThinking`) remove any
+`<think>`/`<reasoning>`/`<thought>` span — including an **unclosed opener** left
+behind by a truncated response — *before* the text is displayed or spoken.
 
 **Scope guard & safety** — non-medical questions (coding, weather, trivia,
 etc.) are politely declined and redirected to health topics; every medical

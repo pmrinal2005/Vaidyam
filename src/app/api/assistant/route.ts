@@ -29,6 +29,7 @@ const SYSTEM_PROMPT =
   "non-medical (coding, weather, general trivia, math, etc.), politely decline in ONE " +
   "sentence and steer them back to a health topic. " +
   "Reply in at most 3 short, crisp sentences — plain spoken language, no markdown, no lists, no headings. " +
+  "Do NOT show any reasoning, thinking, planning, or <think> blocks — output only the final answer directly. " +
   "End every medical reply with a brief note: 'This is general info, not a substitute for professional medical advice.'";
 
 type ChatMsg = { role: "system" | "user" | "assistant"; content: string };
@@ -37,6 +38,48 @@ type ChatMsg = { role: "system" | "user" | "assistant"; content: string };
 function cap(s: unknown, max: number): string {
   const str = typeof s === "string" ? s.trim() : "";
   return str.length > max ? str.slice(0, max) : str;
+}
+
+/**
+ * Remove any chain-of-thought / reasoning wrapper so it is NEVER shown to the
+ * user or read aloud. Reasoning models (qwen3, etc.) emit a `<think>…</think>`
+ * block before the real answer.
+ *
+ * This handles three cases robustly:
+ *   1. A normal, well-formed `<think>…</think>` pair → stripped.
+ *   2. A response that is ONLY the closing part / opens with `<think>` but the
+ *      answer was truncated before the closing tag arrived (the "stops mid-word"
+ *      bug) → everything from `<think>` onward is dropped so no raw thinking leaks.
+ *   3. Stray/duplicated tags left behind → scrubbed.
+ * Also strips a few other reasoning-tag variants some models use.
+ */
+function stripReasoning(input: string): string {
+  let s = input || "";
+
+  // 1) Well-formed pairs for several known reasoning tags.
+  s = s.replace(/<think>[\s\S]*?<\/think>/gi, "");
+  s = s.replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, "");
+  s = s.replace(/<thought>[\s\S]*?<\/thought>/gi, "");
+
+  // 2) Unclosed opener (truncated mid-thought): drop everything from the last
+  //    dangling opener onward — the answer never began, so nothing is lost, and
+  //    crucially the raw thinking is not surfaced.
+  const openIdx = s.search(/<(?:think|reasoning|thought)\b[^>]*>/i);
+  if (openIdx !== -1 && !/<\/(?:think|reasoning|thought)>/i.test(s.slice(openIdx))) {
+    s = s.slice(0, openIdx);
+  }
+
+  // 3) A lone closing tag with the thinking already ahead of it → keep only what
+  //    follows the final closing tag (the actual answer).
+  const closeMatches = [...s.matchAll(/<\/(?:think|reasoning|thought)>/gi)];
+  if (closeMatches.length) {
+    const last = closeMatches[closeMatches.length - 1];
+    s = s.slice((last.index ?? 0) + last[0].length);
+  }
+
+  // 4) Scrub any stray tags and collapse whitespace.
+  s = s.replace(/<\/?(?:think|reasoning|thought)\b[^>]*>/gi, "");
+  return s.replace(/\s+/g, " ").trim();
 }
 
 export async function POST(request: NextRequest) {
@@ -92,7 +135,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 15000);
+    const timer = setTimeout(() => ctrl.abort(), 25000);
 
     const res = await fetch(GROQ_BASE, {
       method: "POST",
@@ -105,11 +148,18 @@ export async function POST(request: NextRequest) {
         model: MODEL,
         messages,
         temperature: 0.6,
-        // Kept low: crisp spoken answers cost far fewer tokens than 2048.
-        max_completion_tokens: 220,
+        // Headroom matters for reasoning models: qwen3 emits a hidden <think>
+        // block BEFORE the answer. With only 220 tokens the thinking consumed
+        // the whole budget and the real reply was cut off mid-word (the
+        // "stops at 'can'" bug). 900 leaves ample room for a short spoken
+        // answer even if the model does a little reasoning first.
+        max_completion_tokens: 900,
         top_p: 0.95,
         stream: false,
-        reasoning_effort: "default",
+        // Ask the model NOT to spend the budget on visible chain-of-thought.
+        // Groq exposes this for qwen3 reasoning models; "none" keeps replies
+        // fast, cheap, and free of a <think> block to leak.
+        reasoning_effort: "none",
         stop: null,
       }),
     });
@@ -136,9 +186,14 @@ export async function POST(request: NextRequest) {
       usage?: { prompt_tokens?: number; completion_tokens?: number };
     } = await res.json();
 
-    let reply = cap(j?.choices?.[0]?.message?.content, 1200);
-    // Some reasoning models wrap chain-of-thought in <think>…</think>. Strip it.
-    reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+    // Read the RAW content first, strip any reasoning/thinking wrapper, and only
+    // then cap. Capping before stripping could truncate inside a <think> block and
+    // leak it; stripping first guarantees the user only ever sees the answer.
+    const rawContent =
+      typeof j?.choices?.[0]?.message?.content === "string"
+        ? j.choices[0].message!.content!
+        : "";
+    let reply = cap(stripReasoning(rawContent), 1500);
 
     if (!reply) {
       return NextResponse.json(

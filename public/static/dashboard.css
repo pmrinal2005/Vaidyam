@@ -1420,21 +1420,106 @@ input[type="range"]::-moz-range-thumb {
   opacity: 0;
 }
 
-/* idle — gentle breathing */
-.va-orb[data-state="idle"] .va-core { animation: va-breathe 3.4s ease-in-out infinite; }
+/* ══════════════════════════════════════════════════════════════════════════
+   CSS-ONLY SMILEY-FACE AVATAR  (replaces the central microphone icon)
+   Built entirely from HTML elements + CSS — no images/SVG/video.
+   Facial expression is driven by the orb's [data-state] attribute, toggled in
+   JS: idle · listening · thinking · speaking · error.
+   ══════════════════════════════════════════════════════════════════════════ */
+.va-face {
+  position: relative;
+  z-index: 2;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  display: block;
+  background: radial-gradient(circle at 32% 28%, var(--accent), var(--accent-2));
+  box-shadow: 0 10px 34px var(--accent-ring), inset 0 -6px 14px rgba(0, 0, 0, 0.14);
+  transition: background 0.35s ease, transform 0.35s ease, box-shadow 0.35s ease;
+}
 
-/* listening — expanding sonar rings + cyan core */
-.va-orb[data-state="listening"] .va-core {
-  background: radial-gradient(circle at 30% 30%, var(--cyan), var(--accent-2));
-  animation: va-pulse 1.1s ease-in-out infinite;
+/* Eyes ---------------------------------------------------------------------- */
+.va-eyes {
+  position: absolute;
+  top: 34px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 22px;
+}
+.va-eye {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--on-accent, #fff);
+  transition: transform 0.3s ease, height 0.3s ease, width 0.3s ease, border-radius 0.3s ease;
+  transform-origin: center;
+}
+.va-pupil {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-2);
+  transform: translate(-50%, -50%);
+  transition: transform 0.35s ease, opacity 0.3s ease;
+}
+
+/* Mouth --------------------------------------------------------------------- */
+.va-mouth {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  width: 34px;
+  height: 17px;
+  transform: translateX(-50%);
+  border: 3px solid var(--on-accent, #fff);
+  border-top: 0;
+  border-radius: 0 0 34px 34px;   /* gentle smile curve */
+  background: transparent;
+  transition: all 0.3s ease;
+}
+
+/* ── IDLE — neutral gentle smile, subtle breathing + periodic blink ── */
+.va-orb[data-state="idle"] .va-face { animation: va-breathe 3.6s ease-in-out infinite; }
+.va-orb[data-state="idle"] .va-eye  { animation: va-blink 4.4s ease-in-out infinite; }
+
+/* ── LISTENING — wide alert eyes with a subtle pulse, inviting smile ── */
+.va-orb[data-state="listening"] .va-face {
+  background: radial-gradient(circle at 32% 28%, var(--cyan), var(--accent-2));
+  animation: va-pulse 1.2s ease-in-out infinite;
+}
+.va-orb[data-state="listening"] .va-eye {
+  width: 17px;
+  height: 17px;               /* wide open, attentive */
+  animation: va-eye-pulse 1.2s ease-in-out infinite;
+}
+.va-orb[data-state="listening"] .va-mouth {
+  width: 30px;
+  height: 15px;               /* keeps a curved, inviting smile */
 }
 .va-orb[data-state="listening"] .va-ring { animation: va-sonar 1.8s ease-out infinite; border-color: var(--cyan); }
 .va-orb[data-state="listening"] .va-ring:nth-child(2) { animation-delay: 0.6s; }
 .va-orb[data-state="listening"] .va-ring:nth-child(3) { animation-delay: 1.2s; }
 
-/* thinking — spinning arc + violet core */
-.va-orb[data-state="thinking"] .va-core {
-  background: radial-gradient(circle at 30% 30%, var(--violet), var(--accent-2));
+/* ── THINKING — eyes look up/around, mouth a small neutral line, float+tilt ── */
+.va-orb[data-state="thinking"] .va-face {
+  background: radial-gradient(circle at 32% 28%, var(--violet), var(--accent-2));
+  animation: va-float 2.4s ease-in-out infinite;
+}
+.va-orb[data-state="thinking"] .va-pupil {
+  animation: va-look-around 2.2s ease-in-out infinite;   /* eyes roll/glance sideways + up */
+}
+.va-orb[data-state="thinking"] .va-mouth {
+  height: 0;
+  width: 16px;
+  border-width: 0 0 3px 0;
+  border-radius: 0;           /* small neutral line "—" */
+  bottom: 28px;
 }
 .va-orb[data-state="thinking"] .va-ring:first-child {
   opacity: 1;
@@ -1444,19 +1529,35 @@ input[type="range"]::-moz-range-thumb {
   animation: va-spin 0.9s linear infinite;
 }
 
-/* speaking — bouncing waveform feel via layered pulses */
-.va-orb[data-state="speaking"] .va-core {
-  background: radial-gradient(circle at 30% 30%, var(--accent), var(--cyan));
-  animation: va-speak 0.7s ease-in-out infinite;
+/* ── SPEAKING — mouth opens/closes (lip-sync feel), gentle happy eyes ── */
+.va-orb[data-state="speaking"] .va-face {
+  background: radial-gradient(circle at 32% 28%, var(--accent), var(--cyan));
+}
+.va-orb[data-state="speaking"] .va-mouth {
+  width: 26px;
+  border-width: 3px;
+  border-radius: 50%;         /* oval mouth that animates open/closed */
+  background: rgba(0, 0, 0, 0.16);
+  bottom: 20px;
+  animation: va-talk 0.42s ease-in-out infinite;
+}
+.va-orb[data-state="speaking"] .va-eye {
+  animation: va-blink 2.6s ease-in-out infinite;   /* expressive gentle blinking */
 }
 .va-orb[data-state="speaking"] .va-ring { animation: va-sonar 1.4s ease-out infinite; }
 .va-orb[data-state="speaking"] .va-ring:nth-child(2) { animation-delay: 0.45s; }
 
-/* error — rose */
-.va-orb[data-state="error"] .va-core {
-  background: radial-gradient(circle at 30% 30%, var(--rose), var(--accent-2));
+/* ── ERROR — rose face, flat concerned mouth ── */
+.va-orb[data-state="error"] .va-face {
+  background: radial-gradient(circle at 32% 28%, var(--rose), var(--accent-2));
+}
+.va-orb[data-state="error"] .va-mouth {
+  height: 0;
+  border-width: 0 0 3px 0;
+  border-radius: 0;
 }
 
+/* Keyframes ------------------------------------------------------------------ */
 @keyframes va-breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
 @keyframes va-pulse   { 0%,100% { transform: scale(1); } 50% { transform: scale(1.12); } }
 @keyframes va-speak   { 0%,100% { transform: scale(1); } 25% { transform: scale(1.1); } 60% { transform: scale(0.96); } }
@@ -1464,6 +1565,34 @@ input[type="range"]::-moz-range-thumb {
 @keyframes va-sonar {
   0%   { opacity: 0.55; transform: scale(0.55); }
   100% { opacity: 0; transform: scale(1.25); }
+}
+/* Blink: squash the eye vertically for a frame. */
+@keyframes va-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  96%           { transform: scaleY(0.1); }
+}
+/* Listening pulse: eyes gently scale to feel alert/attentive. */
+@keyframes va-eye-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.18); }
+}
+/* Thinking float + subtle tilt of the whole face. */
+@keyframes va-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  30%      { transform: translateY(-4px) rotate(-4deg); }
+  70%      { transform: translateY(-4px) rotate(4deg); }
+}
+/* Thinking: pupils glance up then side to side (pondering). */
+@keyframes va-look-around {
+  0%, 100% { transform: translate(-50%, -50%); }
+  25%      { transform: translate(-50%, -140%); }
+  55%      { transform: translate(20%, -120%); }
+  80%      { transform: translate(-120%, -80%); }
+}
+/* Speaking: mouth opens and closes to simulate talking / lip-sync. */
+@keyframes va-talk {
+  0%, 100% { height: 6px;  width: 24px; }
+  50%      { height: 18px; width: 22px; }
 }
 
 .va-status {
@@ -1565,5 +1694,8 @@ input[type="range"]::-moz-range-thumb {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .va-orb .va-core, .va-orb .va-ring { animation: none !important; }
+  .va-orb .va-core, .va-orb .va-ring,
+  .va-orb .va-face, .va-orb .va-eye, .va-orb .va-pupil, .va-orb .va-mouth {
+    animation: none !important;
+  }
 }

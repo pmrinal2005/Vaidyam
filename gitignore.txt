@@ -1,0 +1,34 @@
+# dependencies
+node_modules
+.pnp
+.pnp.js
+
+# next / build
+.next
+out
+dist
+dist-static
+build
+
+# env
+.env
+.env.local
+.env.*.local
+.dev.vars
+
+# debug / ide
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+.idea
+.vscode
+*.tsbuildinfo
+next-env.d.ts
+
+# drizzle
+drizzle/meta
+
+# misc
+coverage
+.vercel
