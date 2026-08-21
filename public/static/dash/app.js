@@ -2,7 +2,13 @@
 (function () {
   "use strict";
   var C = (window.Vaidyam = window.Vaidyam || {});
-  var V = C.views || {};
+  // IMPORTANT: reference the LIVE views registry, never a captured snapshot.
+  // Sibling <Script strategy="afterInteractive"> tags are not guaranteed to
+  // execute in source order on every host/CDN, so a captured `C.views || {}`
+  // could detach from the object views-casual.js later writes into — which is
+  // exactly what made V.casual (and therefore the mode toggle) go missing.
+  C.views = C.views || {};
+  var V = C.views;
 
   // Rail order. Grouped: casual home → twin → reasoning → domains → surfaces.
   // "casual" is the gamified home lens; every Pro view remains present and
@@ -63,33 +69,72 @@
      flips the DEFAULT surface between the gamified Casual home and the
      original Pro Twin Overview. Switching only navigates + reskins the
      shell; the Pro views themselves are never modified. */
+  function flipMode() {
+    var next = (C.mode && C.mode.toggle) ? C.mode.toggle() : "casual";
+    applyMode(next);
+    C.goto(next === "pro" ? "overview" : "casual");
+    C.toast(next === "pro" ? "Pro view — full causal depth" : "Casual view — your living twin");
+    return next;
+  }
+
   function ensureModeToggle() {
-    if (!V.casual) return null; // casual view not loaded → no toggle
+    if (!V.casual) {
+      // Casual view may not have executed yet on hosts that don't preserve
+      // <Script> order. Retry a few times so the toggle can never silently
+      // vanish just because of a load-order race.
+      if ((ensureModeToggle._tries = (ensureModeToggle._tries || 0) + 1) <= 40) {
+        setTimeout(ensureModeToggle, 60);
+      }
+      return null;
+    }
     var host = C.$(".topbar-right");
-    if (!host) return null;
     var btn = C.$("#mode-toggle");
-    if (btn) return btn;
-    btn = document.createElement("button");
-    btn.type = "button";
-    btn.id = "mode-toggle";
-    btn.className = "mode-toggle";
-    btn.setAttribute("aria-label", "Switch dashboard mode");
-    btn.setAttribute("title", "Switch between Casual and Pro");
-    btn.innerHTML =
+    if (!btn && host) {
+      btn = document.createElement("button");
+      btn.type = "button";
+      btn.id = "mode-toggle";
+      btn.className = "mode-toggle";
+      btn.setAttribute("aria-label", "Switch dashboard mode");
+      btn.setAttribute("title", "Switch between Casual and Pro");
+      btn.innerHTML =
+        '<i class="bi bi-controller ic-casual" aria-hidden="true"></i>' +
+        '<i class="bi bi-bar-chart-steps ic-pro" aria-hidden="true"></i>' +
+        '<span class="mode-toggle-label" id="mode-toggle-label"></span>';
+      // Insert before the theme toggle so the two sit together.
+      var theme = C.$("#theme-toggle", host);
+      if (theme) host.insertBefore(btn, theme);
+      else host.insertBefore(btn, host.firstChild);
+      btn.addEventListener("click", flipMode);
+    }
+    // Also build the dedicated, ALWAYS-visible rail switch (spec: "+ rail item").
+    ensureModeRail();
+    syncModeToggle(C.state.view);
+    return btn;
+  }
+
+  /* A prominent, unmissable Casual⇄Pro switch pinned at the top of the rail.
+     Unlike the compact topbar pill (which can wrap/crowd on small viewports),
+     this is always on-screen in the nav rail and drawer. */
+  function ensureModeRail() {
+    if (!V.casual) return null;
+    var nav = C.$("#rail-nav");
+    if (!nav) return null;
+    var sw = C.$("#rail-mode-switch");
+    if (sw) return sw;
+    sw = document.createElement("button");
+    sw.type = "button";
+    sw.id = "rail-mode-switch";
+    sw.className = "rail-mode-switch";
+    sw.setAttribute("aria-label", "Switch between Casual and Pro dashboard");
+    sw.innerHTML =
       '<i class="bi bi-controller ic-casual" aria-hidden="true"></i>' +
       '<i class="bi bi-bar-chart-steps ic-pro" aria-hidden="true"></i>' +
-      '<span class="mode-toggle-label" id="mode-toggle-label"></span>';
-    // Insert before the theme toggle so the two sit together.
-    var theme = C.$("#theme-toggle", host);
-    if (theme) host.insertBefore(btn, theme);
-    else host.insertBefore(btn, host.firstChild);
-    btn.addEventListener("click", function () {
-      var next = (C.mode && C.mode.toggle) ? C.mode.toggle() : "casual";
-      applyMode(next);
-      C.goto(next === "pro" ? "overview" : "casual");
-      C.toast(next === "pro" ? "Pro view — full causal depth" : "Casual view — your living twin");
-    });
-    return btn;
+      '<span class="rail-mode-label">Casual</span>' +
+      '<span class="rail-tip">Switch to Pro / Casual</span>';
+    // Pin it above the nav list.
+    nav.parentNode.insertBefore(sw, nav);
+    sw.addEventListener("click", flipMode);
+    return sw;
   }
 
   function applyMode(mode) {
@@ -104,13 +149,24 @@
   }
 
   function syncModeToggle(view) {
-    var btn = C.$("#mode-toggle");
-    if (!btn) return;
     var mode = (C.mode && C.mode.get) ? C.mode.get() : "casual";
-    btn.setAttribute("data-mode", mode);
-    var lbl = C.$("#mode-toggle-label", btn);
-    if (lbl) lbl.textContent = mode === "pro" ? "Pro" : "Casual";
-    btn.setAttribute("aria-pressed", mode === "pro" ? "true" : "false");
+    var btn = C.$("#mode-toggle");
+    if (btn) {
+      btn.setAttribute("data-mode", mode);
+      var lbl = C.$("#mode-toggle-label", btn);
+      if (lbl) lbl.textContent = mode === "pro" ? "Pro" : "Casual";
+      btn.setAttribute("aria-pressed", mode === "pro" ? "true" : "false");
+    }
+    var sw = C.$("#rail-mode-switch");
+    if (sw) {
+      sw.setAttribute("data-mode", mode);
+      sw.setAttribute("aria-pressed", mode === "pro" ? "true" : "false");
+      // The label announces the CURRENT surface; the icon hints the target.
+      var slbl = C.$(".rail-mode-label", sw);
+      if (slbl) slbl.textContent = mode === "pro" ? "Pro mode" : "Casual mode";
+      var stip = C.$(".rail-tip", sw);
+      if (stip) stip.textContent = mode === "pro" ? "Switch to Casual" : "Switch to Pro";
+    }
   }
 
   /* ── Mobile drawer ── */
