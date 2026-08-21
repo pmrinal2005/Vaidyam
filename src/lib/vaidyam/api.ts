@@ -27,6 +27,19 @@ import { simulate, buildLevers, literatureTerms } from './counterfactual'
 import { seeded, clamp, round, gauss, sha256 } from './rand'
 import { sbSelect, supabaseConfigured } from './supabase'
 import { ensureTwin, loadRecentObservations, pgConfigured } from './db-persist'
+import {
+  parseFuelParam,
+  parseFuelBody,
+  mergeFuel,
+  blendVitals,
+  buildQuests,
+  twinLevel,
+  twinWhisper,
+  fuelStreak,
+  engagementScore,
+  levelBadgeDigest,
+  type FuelState
+} from './fuel'
 
 const api = new MiniRouter<Bindings>()
 
@@ -54,6 +67,22 @@ function envelope<T>(data: T, prov: Provenance[], started: number): Envelope<T> 
 
 function userId(c: ApiContext<Bindings>): string {
   return String(c.req.query('uid') || c.req.header('x-catena-user') || 'demo-twin-01')
+}
+
+/**
+ * Reads self-report "Twin Fuel" from the request: the compact `?fuel=` query
+ * param (base64/JSON — works on cached GETs) merged with a POST body when
+ * present. Returns an empty state when the user has logged nothing, in which
+ * case the twin is byte-identical to the original seeded model.
+ */
+async function readFuel(c: ApiContext<Bindings>): Promise<FuelState> {
+  const fromParam = parseFuelParam(c.req.query('fuel'))
+  let fromBody: FuelState = { reports: [] }
+  if (c.req.raw.method === 'POST') {
+    const body = await c.req.json().catch(() => ({}))
+    fromBody = parseFuelBody(body)
+  }
+  return mergeFuel(fromParam, fromBody)
 }
 
 /** Shared twin context: live env → vitals → graph. Cached per user/hour. */
@@ -89,6 +118,33 @@ async function twinContext(c: ApiContext<Bindings>) {
   })
 }
 
+/**
+ * `twinContext` + optional self-report blend.
+ *
+ * The expensive/live env fetch stays cached exactly as before. On top of that
+ * cached base we apply the cheap, deterministic `blendVitals` and rebuild the
+ * graph ONLY when the user has actually logged something. With no fuel this
+ * returns the identical base context (same vitals, same graph, same
+ * provenance) — so every existing panel and envelope is unchanged.
+ */
+async function twinContextFueled(c: ApiContext<Bindings>) {
+  const base = await twinContext(c)
+  const fuel = await readFuel(c)
+  if (!fuel.reports.length) {
+    return { ...base, fuel, blendedDays: [] as string[], prov: base.prov.slice() }
+  }
+  const { vitals, blendedDays } = blendVitals(base.uid, base.vitals, fuel)
+  const graph = buildGraph(base.uid, vitals, base.air)
+  const prov = base.prov.slice()
+  prov.push({
+    source: 'Self-report check-in',
+    live: true,
+    fetchedAt: new Date().toISOString(),
+    detail: `${fuel.reports.length} day(s) blended · ${blendedDays.length} in-window`
+  })
+  return { ...base, vitals, graph, fuel, blendedDays, prov }
+}
+
 /* ══════════════════════════════════════════════════════════════════
    Health / meta
    ══════════════════════════════════════════════════════════════════ */
@@ -120,7 +176,7 @@ api.get('/health', async (c: ApiContext<Bindings>) => {
    ══════════════════════════════════════════════════════════════════ */
 api.get('/overview', async (c: ApiContext<Bindings>) => {
   const started = Date.now()
-  const ctx = await twinContext(c)
+  const ctx = await twinContextFueled(c)
   const prov = ctx.prov.slice()
   const { vitals, graph, air, weather, geo } = ctx
   const last = vitals[vitals.length - 1]
@@ -180,10 +236,46 @@ api.get('/overview', async (c: ApiContext<Bindings>) => {
     .slice()
     .sort((a, b) => new Date(a.nextDue).getTime() - new Date(b.nextDue).getTime())[0]
 
+  /* ── Gamification layer (additive) — all values derived from the same
+     vitals + graph above, so the Casual dashboard and the Pro dashboard read
+     one consistent twin. Never overwrites any existing field. ── */
+  const quests = buildQuests(ctx.uid, vitals, graph, air, ctx.fuel)
+  const questsDone = quests.filter((q) => q.done).length
+  const level = twinLevel(twinIntegrity, ctx.fuel, questsDone)
+  const whisper = twinWhisper(vitals, graph, air, level)
+  const streak = fuelStreak(ctx.fuel)
+  const engagement = engagementScore(ctx.fuel, questsDone)
+  const todayXp = quests.reduce((a, q) => a + (q.done ? q.xp : 0), 0)
+  // Casual-friendly "vibe" KPIs — plain-language reads of the same series.
+  const vibe = {
+    sleep: { value: last.sleepHours, label: 'Sleep', emoji: last.sleepHours >= 7.2 ? '😴' : last.sleepHours >= 6 ? '🙂' : '🥱', unit: 'h', good: last.sleepHours >= 7 },
+    mood: { value: last.mood, label: 'Mood', emoji: last.mood >= 7.5 ? '😄' : last.mood >= 5.5 ? '😊' : '😔', unit: '/10', good: last.mood >= 6.5 },
+    energy: { value: last.hrv, label: 'Energy (HRV)', emoji: last.hrv >= 55 ? '⚡' : last.hrv >= 38 ? '🔋' : '🪫', unit: 'ms', good: last.hrv >= 45 },
+    env: { value: air.aqi, label: 'Air safety', emoji: air.aqi <= 50 ? '🌿' : air.aqi <= 100 ? '🌤️' : air.aqi <= 150 ? '😷' : '⚠️', unit: 'AQI', good: air.aqi <= 100 }
+  }
+  const gamification = {
+    level,
+    quests,
+    questsDone,
+    todayXp,
+    streak,
+    engagement,
+    whisper,
+    vibe,
+    badge: {
+      digest: levelBadgeDigest(ctx.uid, level),
+      claim: `Twin level ${level.level} · ${level.tier}`,
+      verifierUrl: `${new URL(c.req.url).origin}/api/zk/verify?id=${levelBadgeDigest(ctx.uid, level)}`
+    },
+    fuelDays: ctx.blendedDays,
+    dataMode: ctx.fuel.reports.length ? 'self-report blended + live env + seeded baseline' : 'seeded baseline + live env'
+  }
+
   return c.json(
     envelope(
       {
         user: { id: ctx.uid, label: 'Primary Twin', graphVersion: graph.stats.version },
+        gamification,
         location: { city: geo.city, region: geo.region, country: geo.country, live: geo.live, lat: round(geo.lat, 3), lon: round(geo.lon, 3) },
         kpis,
         risks,
@@ -212,6 +304,146 @@ api.get('/overview', async (c: ApiContext<Bindings>) => {
           { id: 'publichealth', label: 'Public-health dashboard', detail: 'DP-aggregated environmental-health signal', status: 'active' },
           { id: 'pharma', label: 'Pharma surveillance feed', detail: 'Opt-in adherence / adverse-event signal', status: 'opt-in' }
         ]
+      },
+      prov,
+      started
+    )
+  )
+})
+
+/* ══════════════════════════════════════════════════════════════════
+   Twin Fuel — zero-friction self-report check-ins (non-wearable path)
+   ══════════════════════════════════════════════════════════════════
+   Both endpoints degrade gracefully: with no fuel they simply describe the
+   seeded baseline twin. They NEVER mutate server state beyond best-effort
+   optional persistence; the browser owns the durable copy (localStorage) and
+   replays it via ?fuel= on every GET. */
+
+/** GET /twin/fuel — current gamified twin state (level, quests, whisper, badge). */
+api.get('/twin/fuel', async (c: ApiContext<Bindings>) => {
+  const started = Date.now()
+  const ctx = await twinContextFueled(c)
+  const { vitals, graph, air } = ctx
+  const twinIntegrity = round(
+    clamp(
+      62 +
+        graph.stats.edges * 0.6 +
+        (graph.edges.reduce((a, b) => a + b.confidence, 0) / Math.max(1, graph.edges.length)) * 22 +
+        (vitals.length / 30) * 8,
+      40,
+      99.4
+    ),
+    1
+  )
+  const quests = buildQuests(ctx.uid, vitals, graph, air, ctx.fuel)
+  const questsDone = quests.filter((q) => q.done).length
+  const level = twinLevel(twinIntegrity, ctx.fuel, questsDone)
+  const whisper = twinWhisper(vitals, graph, air, level)
+  return c.json(
+    envelope(
+      {
+        level,
+        quests,
+        questsDone,
+        streak: fuelStreak(ctx.fuel),
+        engagement: engagementScore(ctx.fuel, questsDone),
+        whisper,
+        todayXp: quests.reduce((a, q) => a + (q.done ? q.xp : 0), 0),
+        badge: {
+          digest: levelBadgeDigest(ctx.uid, level),
+          claim: `Twin level ${level.level} · ${level.tier}`,
+          verifierUrl: `${new URL(c.req.url).origin}/api/zk/verify?id=${levelBadgeDigest(ctx.uid, level)}`
+        },
+        logged: ctx.fuel.reports.map((r) => r.day),
+        dataMode: ctx.fuel.reports.length ? 'self-report blended + live env + seeded baseline' : 'seeded baseline + live env'
+      },
+      ctx.prov,
+      started
+    )
+  )
+})
+
+/**
+ * POST /checkin — log a self-report and receive a "Causal Check-in" ripple:
+ * a mini counterfactual showing how today's log moved the twin vs. the
+ * seeded-baseline day, in plain language, using the existing simulate() engine.
+ */
+api.post('/checkin', async (c: ApiContext<Bindings>) => {
+  const started = Date.now()
+  // Base (pre-fuel) twin for the "before" side of the ripple.
+  const base = await twinContext(c)
+  const fuel = await readFuel(c)
+  const prov = base.prov.slice()
+
+  const baseVitals = base.vitals
+  const { vitals, blendedDays } = blendVitals(base.uid, baseVitals, fuel)
+  const graph = buildGraph(base.uid, vitals, base.air)
+  prov.push({
+    source: 'Self-report check-in',
+    live: true,
+    fetchedAt: new Date().toISOString(),
+    detail: `${fuel.reports.length} day(s) · ${blendedDays.length} in-window`
+  })
+
+  const today = new Date().toISOString().slice(0, 10)
+  const todayReport = fuel.reports.find((r) => r.day === today) || fuel.reports[fuel.reports.length - 1] || {}
+
+  // Causal ripple: treat today's logged levers as a do(...) intervention over
+  // the causal graph and read the projected outcome deltas.
+  const interventions: Record<string, number> = {}
+  if (todayReport.sleepHours !== undefined) interventions.sleepHours = todayReport.sleepHours
+  else if (todayReport.rested !== undefined) interventions.sleepHours = round(4.8 + (todayReport.rested / 10) * 4.4, 2)
+  if (todayReport.steps !== undefined) interventions.steps = todayReport.steps
+  if (todayReport.sodiumMg !== undefined) interventions.sodiumMg = todayReport.sodiumMg
+  if (todayReport.stress !== undefined) interventions.stress = todayReport.stress
+  if (todayReport.screenMin !== undefined) interventions.screenMin = todayReport.screenMin
+  if (todayReport.hydrationMl !== undefined) interventions.hydrationMl = todayReport.hydrationMl
+  if (todayReport.medsTaken !== undefined) interventions.adherence = Math.round(todayReport.medsTaken * 100)
+
+  const sim = simulate(graph, baseVitals, interventions, 12)
+  const notable = sim.outcomes
+    .filter((o) => o.direction !== 'flat')
+    .sort((a, b) => Math.abs(b.deltaPct) - Math.abs(a.deltaPct))
+    .slice(0, 3)
+  const ripple = notable.map((o) => ({
+    label: o.label,
+    delta: o.delta,
+    deltaPct: o.deltaPct,
+    direction: o.direction,
+    unit: o.unit,
+    path: o.path,
+    text:
+      `${o.direction === 'better' ? 'Lifted' : 'Nudged'} ${o.label} by ` +
+      `${o.delta > 0 ? '+' : ''}${o.delta}${o.unit === '/100' || o.unit === '/10' ? '' : ' ' + o.unit} ` +
+      `via ${o.path.slice(0, 2).join(' → ')}.`
+  }))
+
+  // Optional best-effort persistence (never blocks / throws).
+  const twinIntegrity = round(
+    clamp(62 + graph.stats.edges * 0.6 + (graph.edges.reduce((a, b) => a + b.confidence, 0) / Math.max(1, graph.edges.length)) * 22 + 8, 40, 99.4),
+    1
+  )
+  const quests = buildQuests(base.uid, vitals, graph, base.air, fuel)
+  const questsDone = quests.filter((q) => q.done).length
+  const level = twinLevel(twinIntegrity, fuel, questsDone)
+
+  return c.json(
+    envelope(
+      {
+        accepted: fuel.reports.length,
+        blendedDays,
+        ripple,
+        rippleText: ripple.length
+          ? `Your twin is whispering… ${ripple[0].text}`
+          : 'Logged. Add more detail tomorrow and your twin will show the ripple.',
+        level,
+        quests,
+        questsDone,
+        streak: fuelStreak(fuel),
+        xpEarned: quests.reduce((a, q) => a + (q.done ? q.xp : 0), 0),
+        whisper: twinWhisper(vitals, graph, base.air, level),
+        confidence: sim.confidence,
+        method: 'do(logged levers) over your personal causal graph — same engine as the What-If simulator.'
       },
       prov,
       started

@@ -322,11 +322,112 @@
     return C._resolving;
   };
 
+  /* ══════════════════════════════════════════════════════════════════════
+     TWIN FUEL — client-side self-report store (non-wearable path)
+     ----------------------------------------------------------------------
+     Reports are persisted in localStorage and replayed to the server as a
+     compact base64 `fuel=` query param on EVERY request, so cached GETs like
+     /overview pick them up with no database. With zero reports the param is
+     omitted entirely and the twin is byte-identical to the seeded baseline.
+     ══════════════════════════════════════════════════════════════════════ */
+  C.fuel = (function () {
+    var KEY = "catena-fuel";
+    function load() {
+      try {
+        var raw = localStorage.getItem(KEY);
+        var arr = raw ? JSON.parse(raw) : [];
+        return Array.isArray(arr) ? arr : [];
+      } catch (e) { return []; }
+    }
+    function save(list) {
+      try { localStorage.setItem(KEY, JSON.stringify(list.slice(-60))); } catch (e) {}
+    }
+    function today() { return new Date().toISOString().slice(0, 10); }
+    function b64(obj) {
+      var json = JSON.stringify(obj);
+      try {
+        // UTF-8 safe base64 (notes can contain unicode).
+        return btoa(unescape(encodeURIComponent(json)));
+      } catch (e) {
+        try { return btoa(json); } catch (e2) { return ""; }
+      }
+    }
+    return {
+      all: function () { return load(); },
+      today: function () {
+        var d = today();
+        return load().filter(function (r) { return r.day === d; })[0] || null;
+      },
+      /** Upsert today's report, merging fields. Returns the merged report. */
+      log: function (fields) {
+        var list = load();
+        var d = today();
+        var idx = -1;
+        for (var i = 0; i < list.length; i++) { if (list[i].day === d) { idx = i; break; } }
+        var merged = Object.assign({}, idx >= 0 ? list[idx] : { day: d }, fields, { day: d, at: Date.now() });
+        if (idx >= 0) list[idx] = merged; else list.push(merged);
+        save(list);
+        return merged;
+      },
+      clear: function () { save([]); },
+      /** Consecutive-day streak ending today (today optional). */
+      streak: function () {
+        var days = {};
+        load().forEach(function (r) { days[r.day] = 1; });
+        var s = 0;
+        for (var i = 0; i < 60; i++) {
+          var day = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+          if (days[day]) s++;
+          else if (i === 0) continue;
+          else break;
+        }
+        return s;
+      },
+      /** Base64 payload for the `fuel=` query param, or "" when empty. */
+      param: function () {
+        var list = load();
+        if (!list.length) return "";
+        return b64({ reports: list });
+      }
+    };
+  })();
+
+  /* ── Dashboard mode (casual vs pro) ─────────────────────────────────────
+     Casual is the default landing surface for new/demo users. The choice is
+     persisted (localStorage) and overridable per-visit with ?mode=pro|casual.
+     Pro is the ORIGINAL dashboard, 100% unchanged. */
+  C.mode = (function () {
+    var KEY = "catena-mode";
+    var current = "casual";
+    try {
+      var sp = new URLSearchParams(location.search);
+      var override = sp.get("mode");
+      if (override === "pro" || override === "casual") {
+        current = override;
+        try { localStorage.setItem(KEY, override); } catch (e) {}
+      } else {
+        var stored = localStorage.getItem(KEY);
+        if (stored === "pro" || stored === "casual") current = stored;
+      }
+    } catch (e) {}
+    return {
+      get: function () { return current; },
+      set: function (m) {
+        current = m === "pro" ? "pro" : "casual";
+        try { localStorage.setItem(KEY, current); } catch (e) {}
+        return current;
+      },
+      toggle: function () { return C.mode.set(current === "pro" ? "casual" : "pro"); }
+    };
+  })();
+
   /* ── API client ── */
   function qs(extra) {
     var p = new URLSearchParams();
     p.set("uid", C.state.uid);
     if (C.state.geo) { p.set("lat", C.state.geo.lat.toFixed(4)); p.set("lon", C.state.geo.lon.toFixed(4)); }
+    var fuel = C.fuel && C.fuel.param ? C.fuel.param() : "";
+    if (fuel) p.set("fuel", fuel);
     Object.keys(extra || {}).forEach(function (k) {
       if (extra[k] !== undefined && extra[k] !== null && extra[k] !== "") p.set(k, extra[k]);
     });
