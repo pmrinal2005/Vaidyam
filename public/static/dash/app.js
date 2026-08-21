@@ -4,15 +4,20 @@
   var C = (window.Vaidyam = window.Vaidyam || {});
   var V = C.views || {};
 
-  // Rail order. Grouped: twin → reasoning → domains → surfaces.
+  // Rail order. Grouped: casual home → twin → reasoning → domains → surfaces.
+  // "casual" is the gamified home lens; every Pro view remains present and
+  // 100% unchanged, so a Casual user can expand any card into the original
+  // panel and a Pro user can ignore casual entirely.
   var ORDER = [
+    "casual",
     "overview", "assistant", "graph", "swarm", "cascade", "counterfactual",
     "environment", "medication", "nutrition",
     "clinician", "privacy", "publichealth", "memory",
     "ingestion", "saas"
   ];
-  var TABS = ["overview", "assistant", "graph", "swarm", "counterfactual", "environment"];
-  var GROUP_AFTER = { assistant: true, counterfactual: true, nutrition: true, memory: true };
+  // Casual is the DEFAULT home tab on the mobile tab-bar.
+  var TABS = ["casual", "overview", "assistant", "counterfactual", "environment"];
+  var GROUP_AFTER = { casual: true, assistant: true, counterfactual: true, nutrition: true, memory: true };
 
   function views() {
     return ORDER.filter(function (k) { return V[k]; });
@@ -50,6 +55,62 @@
       if (h) h.textContent = v.title || v.label;
       document.title = "Vaidyam — " + (v.title || v.label);
     }
+    syncModeToggle(view);
+  }
+
+  /* ── Casual / Pro mode toggle ──────────────────────────────────────────
+     A persistent, one-tap switch (localStorage + ?mode= via C.mode) that
+     flips the DEFAULT surface between the gamified Casual home and the
+     original Pro Twin Overview. Switching only navigates + reskins the
+     shell; the Pro views themselves are never modified. */
+  function ensureModeToggle() {
+    if (!V.casual) return null; // casual view not loaded → no toggle
+    var host = C.$(".topbar-right");
+    if (!host) return null;
+    var btn = C.$("#mode-toggle");
+    if (btn) return btn;
+    btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = "mode-toggle";
+    btn.className = "mode-toggle";
+    btn.setAttribute("aria-label", "Switch dashboard mode");
+    btn.setAttribute("title", "Switch between Casual and Pro");
+    btn.innerHTML =
+      '<i class="bi bi-controller ic-casual" aria-hidden="true"></i>' +
+      '<i class="bi bi-bar-chart-steps ic-pro" aria-hidden="true"></i>' +
+      '<span class="mode-toggle-label" id="mode-toggle-label"></span>';
+    // Insert before the theme toggle so the two sit together.
+    var theme = C.$("#theme-toggle", host);
+    if (theme) host.insertBefore(btn, theme);
+    else host.insertBefore(btn, host.firstChild);
+    btn.addEventListener("click", function () {
+      var next = (C.mode && C.mode.toggle) ? C.mode.toggle() : "casual";
+      applyMode(next);
+      C.goto(next === "pro" ? "overview" : "casual");
+      C.toast(next === "pro" ? "Pro view — full causal depth" : "Casual view — your living twin");
+    });
+    return btn;
+  }
+
+  function applyMode(mode) {
+    var shell = C.$("#dash-shell");
+    if (shell) shell.setAttribute("data-mode", mode);
+    try {
+      var u = new URL(location.href);
+      u.searchParams.set("mode", mode);
+      history.replaceState(null, "", u.pathname + u.search + location.hash);
+    } catch (e) {}
+    syncModeToggle(C.state.view);
+  }
+
+  function syncModeToggle(view) {
+    var btn = C.$("#mode-toggle");
+    if (!btn) return;
+    var mode = (C.mode && C.mode.get) ? C.mode.get() : "casual";
+    btn.setAttribute("data-mode", mode);
+    var lbl = C.$("#mode-toggle-label", btn);
+    if (lbl) lbl.textContent = mode === "pro" ? "Pro" : "Casual";
+    btn.setAttribute("aria-pressed", mode === "pro" ? "true" : "false");
   }
 
   /* ── Mobile drawer ── */
@@ -131,6 +192,13 @@
 
   C.goto = function (view) {
     if (!V[view]) return;
+    // Keep the persisted mode aligned with the surface the user actually
+    // lands on: entering Casual persists casual; entering a Pro panel
+    // persists pro — so the next visit reopens where they left off.
+    if (C.mode && C.mode.set) {
+      var want = view === "casual" ? "casual" : "pro";
+      if (C.mode.get() !== want) { C.mode.set(want); applyMode(want); }
+    }
     closeRail();
     C.load(view);
   };
@@ -185,7 +253,14 @@
 
     window.addEventListener("hashchange", function () {
       var h = location.hash.slice(1);
-      if (h && V[h] && h !== C.state.view) C.load(h);
+      if (h && V[h] && h !== C.state.view) {
+        // Keep the persisted mode + toggle aligned with hash-driven navigation.
+        if (C.mode && C.mode.set) {
+          var want = h === "casual" ? "casual" : "pro";
+          if (C.mode.get() !== want) { C.mode.set(want); applyMode(want); }
+        }
+        C.load(h);
+      }
     });
 
     // Re-render SVG-heavy views on resize so chart widths stay correct.
@@ -226,8 +301,20 @@
     var av = C.$("#user-name");
     if (av) av.textContent = "Twin " + String(C.state.uid || "").replace("twin-", "").slice(0, 6);
 
+    // Casual / Pro mode toggle + shell state.
+    ensureModeToggle();
+    var mode = (C.mode && C.mode.get) ? C.mode.get() : "casual";
+    applyMode(mode);
+
+    // Start view resolution:
+    //   1. explicit #hash wins (deep links / shares),
+    //   2. otherwise the persisted mode chooses the home surface —
+    //      Casual is the default for new/demo users (falls back to overview
+    //      if the casual view failed to load).
     var start = location.hash.slice(1);
-    if (!V[start]) start = "overview";
+    if (!V[start]) {
+      start = mode === "pro" ? "overview" : (V.casual ? "casual" : "overview");
+    }
 
     // Geolocation is best-effort; the API falls back to edge geo either way.
     C.requestGeo().then(function () { C.load(start); });
