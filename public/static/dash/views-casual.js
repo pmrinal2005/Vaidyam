@@ -22,12 +22,13 @@
     }[aura] || [C.hue("mint"), C.hue("blue")];
   }
 
-  /* Living-twin avatar: an interactive, lightweight 3D sphere (WebGL via
-     Three.js, CDN-loaded) with stylized eyes + lips on the front face that
-     dynamically follow the user's cursor. Keeps the original neon-glow aura /
-     colour scheme (breathing rate + hue reflect integrity, AQI and top risk).
-     A pure-CSS orb is rendered underneath as an instant, zero-dependency
-     fallback for reduced-motion, WebGL-less, or slow-to-load environments. */
+  /* Living-twin avatar: an interactive 3D model (a supplied model.glb rendered
+     with WebGL via Three.js, CDN-loaded) that dynamically turns to face — and
+     whose eyes/face therefore follow — the user's cursor. Keeps the original
+     neon-glow aura / colour scheme (breathing cadence + hue reflect integrity,
+     AQI and top risk). A pure-CSS orb is rendered underneath as an instant,
+     zero-dependency fallback for reduced-motion, WebGL-less, or slow-to-load
+     environments, so first paint is immediate. */
   function avatar(level, air, topRisk) {
     var cols = auraColors(level.aura);
     var breath = air && air.aqi > 150 ? "3.4s" : air && air.aqi > 100 ? "4.2s" : "6s";
@@ -43,7 +44,7 @@
     return (
       '<div class="twin-avatar ' + riskPulse + '" style="--a1:' + cols[0] + ';--a2:' + cols[1] + ';--breath:' + breath + '">' +
       // 3D canvas mount — filled in by initTwin3D(); labelled for a11y.
-      '<div id="twin-3d" class="twin-3d" role="img" aria-label="Interactive 3D health-twin avatar whose eyes follow your cursor"></div>' +
+      '<div id="twin-3d" class="twin-3d" role="img" aria-label="Interactive 3D health-twin avatar whose eyes follow your cursor" data-model="/static/dash/model.glb"></div>' +
       // CSS-orb fallback (also the instant first paint before WebGL is ready).
       '<div class="twin-orb twin-orb-fallback" aria-hidden="true"><div class="twin-orb-core"></div><div class="twin-orb-ring"></div><div class="twin-orb-ring r2"></div></div>' +
       '<div class="twin-particles" aria-hidden="true">' +
@@ -68,12 +69,21 @@
     return _scriptCache[src];
   }
 
-  var THREE_CDN = "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js";
+  /* CDN builds (non-module UMD so `THREE.GLTFLoader` becomes global here — no
+     bundler / import-map needed in these static files). Pinned for reliability. */
+  var THREE_CDN = "https://cdn.jsdelivr.net/npm/three@0.137.0/build/three.min.js";
+  var GLTF_CDN = "https://cdn.jsdelivr.net/npm/three@0.137.0/examples/js/loaders/GLTFLoader.js";
+  var MODEL_URL = "/static/dash/model.glb";
 
-  /* ══════════════ Interactive 3D twin sphere ══════════════
-     Lightweight: one low-poly sphere + a few tiny meshes for eyes/lips, no
-     textures, no post-processing, capped DPR, pauses when off-screen/tab hidden
-     so it stays friendly on low-resource hardware. Eyes track the cursor. */
+  // Cache the parsed GLTF scene once so re-renders (every check-in) reuse it
+  // instantly — no re-download, instant load after the first paint.
+  var _modelCache = null;
+
+  /* ══════════════ Interactive 3D twin (model.glb) ══════════════
+     Lightweight: a single supplied GLB, no post-processing, capped DPR,
+     low-power GPU hint, pauses when off-screen / tab hidden so it stays
+     friendly on low-resource hardware. The whole model eases to "look at"
+     the cursor, so its face + eyes follow the user's mouse. */
   function initTwin3D() {
     var mount = C.$("#twin-3d");
     if (!mount) return;
@@ -81,16 +91,43 @@
     if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     if (C._twin3DFailed) return;
 
-    loadScript(THREE_CDN).then(function () {
-      var THREE = window.THREE;
-      if (!THREE || !C.$("#twin-3d")) return;
-      try { buildTwinScene(THREE, C.$("#twin-3d")); }
-      catch (e) { C._twin3DFailed = true; /* CSS fallback remains visible */ }
-    }).catch(function () { C._twin3DFailed = true; });
+    loadScript(THREE_CDN)
+      .then(function () { return loadScript(GLTF_CDN); })
+      .then(function () {
+        var THREE = window.THREE;
+        if (!THREE || !THREE.GLTFLoader || !C.$("#twin-3d")) { C._twin3DFailed = true; return; }
+        try { buildTwinScene(THREE, C.$("#twin-3d")); }
+        catch (e) { C._twin3DFailed = true; /* CSS fallback remains visible */ }
+      })
+      .catch(function () { C._twin3DFailed = true; });
   }
 
   function hexToColor(THREE, hex) {
     try { return new THREE.Color(hex); } catch (e) { return new THREE.Color("#7cf5c4"); }
+  }
+
+  /* Load (and cache) the GLB scene, centered + unit-scaled so it always fits
+     the avatar box regardless of the export's original transform. */
+  function loadTwinModel(THREE) {
+    if (_modelCache) return Promise.resolve(_modelCache);
+    return new Promise(function (resolve, reject) {
+      var loader = new THREE.GLTFLoader();
+      loader.load(MODEL_URL, function (gltf) {
+        var root = gltf.scene || (gltf.scenes && gltf.scenes[0]);
+        if (!root) { reject(new Error("empty gltf")); return; }
+        // Center on origin and normalise to a ~unit sphere so scale/tilt math
+        // is predictable for any supplied model.glb.
+        var box = new THREE.Box3().setFromObject(root);
+        var size = box.getSize(new THREE.Vector3());
+        var center = box.getCenter(new THREE.Vector3());
+        root.position.sub(center);
+        var maxDim = Math.max(size.x, size.y, size.z) || 1;
+        var norm = 2.6 / maxDim;
+        root.scale.setScalar(norm);
+        _modelCache = root;
+        resolve(root);
+      }, undefined, function (err) { reject(err); });
+    });
   }
 
   function buildTwinScene(THREE, mount) {
@@ -111,71 +148,66 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75)); // cap DPR for low-end GPUs
     renderer.setSize(W, H, false);
     renderer.setClearColor(0x000000, 0);
+    if ("outputEncoding" in renderer && THREE.sRGBEncoding) renderer.outputEncoding = THREE.sRGBEncoding;
     mount.appendChild(renderer.domElement);
     renderer.domElement.style.display = "block";
 
-    // Root group so the whole twin (body + face) breathes / reacts together.
+    // Root group so the whole twin breathes / reacts together.
     var twin = new THREE.Group();
     scene.add(twin);
 
-    // ── Glowing body sphere (neon aura) — low poly, cheap ──
-    var bodyGeo = new THREE.SphereGeometry(1.5, 32, 24);
-    var bodyMat = new THREE.MeshStandardMaterial({
-      color: col1, emissive: col1.clone().multiplyScalar(0.55),
-      roughness: 0.32, metalness: 0.12, transparent: true, opacity: 0.96
-    });
-    var body = new THREE.Mesh(bodyGeo, bodyMat);
-    twin.add(body);
-
-    // Soft outer glow shell (additive, back-side) for the neon halo.
+    // ── Soft neon outer glow shell (additive, back-side) — the neon halo that
+    //    keeps the original aesthetic behind the loaded model. ──
     var glowGeo = new THREE.SphereGeometry(1.72, 24, 18);
     var glowMat = new THREE.MeshBasicMaterial({
-      color: col2, transparent: true, opacity: 0.16,
+      color: col2, transparent: true, opacity: 0.18,
       side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false
     });
-    twin.add(new THREE.Mesh(glowGeo, glowMat));
-
-    // ── Face group (eyes + lips) sits on the front of the sphere ──
-    var face = new THREE.Group();
-    twin.add(face);
-
-    var eyeWhiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x9fb8c9, emissiveIntensity: 0.35, roughness: 0.25 });
-    var pupilMat = new THREE.MeshStandardMaterial({ color: 0x0b0d10, roughness: 0.2, metalness: 0.1 });
-
-    function makeEye(x) {
-      var g = new THREE.Group();
-      var white = new THREE.Mesh(new THREE.SphereGeometry(0.34, 20, 16), eyeWhiteMat);
-      white.scale.set(1, 1.15, 0.6);
-      var pupil = new THREE.Mesh(new THREE.SphereGeometry(0.155, 16, 12), pupilMat);
-      pupil.position.set(0, 0, 0.26);
-      g.add(white); g.add(pupil);
-      g.position.set(x, 0.42, 1.32);
-      g._pupil = pupil;
-      face.add(g);
-      return g;
-    }
-    var leftEye = makeEye(-0.5);
-    var rightEye = makeEye(0.5);
-
-    // ── Stylized lips (a smiling curve made from a thin torus arc) ──
-    var lipMat = new THREE.MeshStandardMaterial({ color: col2, emissive: col2.clone().multiplyScalar(0.5), roughness: 0.3, metalness: 0.15 });
-    var lips = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.075, 12, 28, Math.PI), lipMat);
-    // Rotate the half-torus so its open side faces up → a smile.
-    lips.rotation.z = Math.PI;
-    lips.position.set(0, -0.34, 1.34);
-    face.add(lips);
+    var glow = new THREE.Mesh(glowGeo, glowMat);
+    twin.add(glow);
 
     // ── Lights (cheap: one ambient + two coloured points echoing the aura) ──
-    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-    var key = new THREE.PointLight(col1.getHex(), 1.4, 20); key.position.set(3, 3, 5); scene.add(key);
-    var fill = new THREE.PointLight(col2.getHex(), 1.0, 20); fill.position.set(-3, -1, 4); scene.add(fill);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    var key = new THREE.PointLight(col1.getHex(), 1.5, 24); key.position.set(3, 3, 5); scene.add(key);
+    var fill = new THREE.PointLight(col2.getHex(), 1.1, 24); fill.position.set(-3, -1, 4); scene.add(fill);
+    var rim = new THREE.PointLight(0xffffff, 0.5, 24); rim.position.set(0, 0, -5); scene.add(rim);
+
+    // Model holder — cloned from the cached scene so multiple renders never
+    // fight over one object graph.
+    var modelGroup = new THREE.Group();
+    twin.add(modelGroup);
+    var loadedModel = null;
+
+    loadTwinModel(THREE).then(function (root) {
+      if (!renderer.domElement || !renderer.domElement.parentNode) return; // torn down
+      loadedModel = root.clone(true);
+      // Re-skin with a neon emissive material so the avatar keeps the twin's
+      // living aura colour scheme (the supplied GLB ships no textures).
+      loadedModel.traverse(function (o) {
+        if (o.isMesh) {
+          o.material = new THREE.MeshStandardMaterial({
+            color: col1,
+            emissive: col1.clone().multiplyScalar(0.42),
+            emissiveIntensity: 1.0,
+            roughness: 0.34, metalness: 0.18,
+            transparent: true, opacity: 0.98
+          });
+          o.castShadow = false; o.receiveShadow = false;
+        }
+      });
+      modelGroup.add(loadedModel);
+      mount.setAttribute("data-ready", "1"); // fade the CSS fallback out
+    }).catch(function () {
+      C._twin3DFailed = true; // leave the CSS orb fallback visible
+    });
 
     // ── Interaction: track pointer relative to this element's viewport ──
     var target = { x: 0, y: 0 };      // normalized -1..1 within the avatar rect
     var current = { x: 0, y: 0 };     // eased follow
     function onPointer(e) {
       var r = mount.getBoundingClientRect();
-      var px = (e.clientX - r.left) / r.width;   // 0..1
+      if (!r.width || !r.height) return;
+      var px = (e.clientX - r.left) / r.width;   // 0..1 relative to element viewport
       var py = (e.clientY - r.top) / r.height;   // 0..1
       target.x = Math.max(-1, Math.min(1, (px - 0.5) * 2));
       target.y = Math.max(-1, Math.min(1, (py - 0.5) * 2));
@@ -219,27 +251,21 @@
       var s = 1 + Math.sin(t * breathSpeed) * amp;
       twin.scale.set(s, s, s);
 
-      // Gentle idle rotation of the body only (face stays forward).
-      body.rotation.y = Math.sin(t * 0.00035) * 0.18;
-      body.rotation.x = Math.cos(t * 0.0003) * 0.08;
-
-      // Ease toward pointer; twin tilts slightly, eyes track more strongly.
+      // Ease toward pointer; the WHOLE model turns to "look at" the cursor so
+      // its face + eyes follow the user's mouse. A gentle idle drift keeps it
+      // alive when the pointer is still.
       current.x += (target.x - current.x) * 0.08;
       current.y += (target.y - current.y) * 0.08;
-      twin.rotation.y = current.x * 0.28;
-      twin.rotation.x = -current.y * 0.18;
+      var idle = Math.sin(t * 0.0004) * 0.06;
+      modelGroup.rotation.y = current.x * 0.7 + idle;
+      modelGroup.rotation.x = -current.y * 0.45;
 
-      // Pupils shift within the eye to face the cursor.
-      var pxShift = current.x * 0.12, pyShift = -current.y * 0.1;
-      leftEye._pupil.position.x = pxShift; leftEye._pupil.position.y = pyShift;
-      rightEye._pupil.position.x = pxShift; rightEye._pupil.position.y = pyShift;
+      // Glow shell counter-rotates subtly for a living halo (kept cheap).
+      glow.rotation.y = -idle * 0.5;
 
       renderer.render(scene, camera);
     }
     raf = requestAnimationFrame(frame);
-
-    // Signal success so CSS can fade the fallback orb out.
-    mount.setAttribute("data-ready", "1");
 
     // Teardown to avoid leaks across re-renders.
     C._twinTeardown = function () {
@@ -249,7 +275,10 @@
       if (io) io.disconnect();
       if (ro) ro.disconnect();
       try {
-        bodyGeo.dispose(); glowGeo.dispose(); lips.geometry.dispose();
+        glowGeo.dispose();
+        if (loadedModel) loadedModel.traverse(function (o) {
+          if (o.isMesh) { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }
+        });
         renderer.dispose();
       } catch (e) {}
       if (renderer.domElement && renderer.domElement.parentNode) {
@@ -530,23 +559,44 @@
       { id: "screenMin", label: "Screen", icon: "bi-phone", min: 30, max: 700, step: 20, val: 300, unit: "m" }
     ];
     return (
-      '<div id="arena-drawer" class="fuel-drawer" hidden>' +
+      // `drawer-elevated` lifts the whole overlay above the fixed topbar so it
+      // never clips underneath it (spec 2a — stacking / layering fix).
+      '<div id="arena-drawer" class="fuel-drawer drawer-elevated" hidden>' +
       '<div class="fuel-panel arena-panel">' +
-      '<div class="fuel-head"><h3><i class="bi bi-magic"></i> What-If Arena</h3>' +
-      '<button type="button" class="topbar-icon-btn" data-close-arena aria-label="Close"><i class="bi bi-x-lg"></i></button></div>' +
-      '<p class="tiny" style="color:var(--ink-3)">Drag the levers. Your cartoon twin reacts instantly along its real causal paths.</p>' +
+      // Header row: title + inline avatar/status badge + a clear X close button
+      // pinned top-right (spec 2b).
+      '<div class="fuel-head arena-head">' +
+      '<h3><i class="bi bi-magic"></i> What-If Arena</h3>' +
+      '<div class="arena-head-right">' +
+      '<span class="arena-status-badge" id="arena-status-badge"><span class="arena-badge-face"><i class="bi bi-emoji-smile-fill" aria-hidden="true"></i></span><span class="arena-badge-txt">Twin<b id="arena-status-word">steady</b></span></span>' +
+      '<button type="button" class="arena-close" data-close-arena aria-label="Close what-if arena"><i class="bi bi-x-lg" aria-hidden="true"></i></button>' +
+      "</div></div>" +
+      '<p class="tiny arena-sub">Drag a lever. Your twin reacts instantly along its real causal paths.</p>' +
       '<div class="arena-twin" id="arena-twin"><span class="arena-face"><i class="bi bi-emoji-smile-fill" aria-hidden="true"></i></span></div>' +
+      // Each parameter wrapped in a glassmorphic grid card with a clear visual
+      // hierarchy: title → live quantitative value → custom-styled track (2c).
       '<div class="arena-levers">' + levers.map(function (l) {
-        return '<div class="arena-lever"><span class="arena-l-emoji"><i class="bi ' + l.icon + '" aria-hidden="true"></i></span>' +
-          '<label class="fuel-label tiny">' + C.esc(l.label) + ' <b id="av-' + l.id + '">' + l.val + (l.unit || "") + "</b></label>" +
-          '<input type="range" id="arena-' + l.id + '" min="' + l.min + '" max="' + l.max + '" step="' + l.step + '" value="' + l.val + '" data-arena="' + l.id + '" data-unit="' + (l.unit || "") + '"></div>';
+        return '<div class="arena-lever lever-card" style="--lh:' + C.hue(LEVER_HUE[l.id] || "mint") + '">' +
+          '<div class="lever-card-head">' +
+          '<span class="lever-ico"><i class="bi ' + l.icon + '" aria-hidden="true"></i></span>' +
+          '<span class="lever-title">' + C.esc(l.label) + "</span>" +
+          '<span class="lever-value"><b id="av-' + l.id + '">' + l.val + '</b><small>' + C.esc(l.unit || "") + "</small></span>" +
+          "</div>" +
+          '<input type="range" class="lever-track" id="arena-' + l.id + '" min="' + l.min + '" max="' + l.max + '" step="' + l.step + '" value="' + l.val + '" data-arena="' + l.id + '" data-unit="' + (l.unit || "") + '" aria-label="' + C.esc(l.label) + '">' +
+          "</div>";
       }).join("") + "</div>" +
+      // Lower panel: readout + primary actions, with roomier padding + contrast.
+      '<div class="arena-lower">' +
       '<div id="arena-out" class="arena-out"><p class="tiny muted">Move a lever to see the ripple…</p></div>' +
-      '<div class="arena-foot"><button type="button" class="btn btn-sm" data-arena-commit><i class="bi bi-flag"></i> Commit as quest</button>' +
+      '<div class="arena-foot"><button type="button" class="btn btn-sm btn-primary btn-glow" data-arena-commit><i class="bi bi-flag"></i> Commit as quest</button>' +
       '<button type="button" class="btn btn-sm" data-goto="counterfactual"><i class="bi bi-arrows-fullscreen"></i> Full simulator</button></div>' +
+      "</div>" +
       "</div></div>"
     );
   }
+
+  /* Per-lever hue so each glassmorphic card reads as its own domain. */
+  var LEVER_HUE = { sleepHours: "blue", sodiumMg: "amber", steps: "mint", screenMin: "violet" };
 
   /* ══════════════════ interaction wiring ══════════════════ */
   function wireCasual() {
@@ -753,6 +803,14 @@
       : score > -1 ? "bi-emoji-neutral-fill" : score > -6 ? "bi-emoji-frown-fill" : "bi-emoji-dizzy-fill";
     var twin = C.$("#arena-twin .arena-face", root);
     if (twin) { twin.innerHTML = '<i class="bi ' + faceIcon + '" aria-hidden="true"></i>'; twin.parentNode.classList.toggle("arena-happy", score > 1); twin.parentNode.classList.toggle("arena-sad", score < -1); }
+
+    // Keep the inline header status badge in sync with the twin's reaction.
+    var badge = C.$("#arena-status-badge", root);
+    var badgeFace = C.$(".arena-badge-face i", root);
+    var badgeWord = C.$("#arena-status-word", root);
+    if (badgeFace) badgeFace.className = "bi " + faceIcon;
+    if (badgeWord) badgeWord.textContent = score > 1 ? "thriving" : score < -1 ? "strained" : "steady";
+    if (badge) { badge.classList.toggle("is-good", score > 1); badge.classList.toggle("is-bad", score < -1); }
 
     var out = C.$("#arena-out", root);
     if (out) {

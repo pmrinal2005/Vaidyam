@@ -71,10 +71,25 @@
      shell; the Pro views themselves are never modified. */
   function flipMode() {
     var next = (C.mode && C.mode.toggle) ? C.mode.toggle() : "casual";
+    onModeToggle(next);
+    return next;
+  }
+
+  /* Directly select an explicit mode ('casual' | 'pro'). Used by the segmented
+     control so tapping a segment always lands on THAT surface (not a blind
+     toggle). Persists the choice + navigates + reskins the shell. */
+  function selectMode(mode) {
+    mode = mode === "pro" ? "pro" : "casual";
+    if (C.mode && C.mode.set) C.mode.set(mode);
+    onModeToggle(mode);
+    return mode;
+  }
+
+  /* Single onToggle handler (spec 3): receives the resolved 'casual' | 'pro'. */
+  function onModeToggle(next) {
     applyMode(next);
     C.goto(next === "pro" ? "overview" : "casual");
     C.toast(next === "pro" ? "Pro view — full causal depth" : "Casual view — your living twin");
-    return next;
   }
 
   function ensureModeToggle() {
@@ -90,21 +105,35 @@
     var host = C.$(".topbar-right");
     var btn = C.$("#mode-toggle");
     if (!btn && host) {
-      btn = document.createElement("button");
-      btn.type = "button";
+      // Dual-state segmented control (spec 3): a pill-shaped container with two
+      // equal-width segments (CASUAL / PRO), a solid animated active indicator
+      // that slides between them, and an onToggle handler passing the picked
+      // mode. `role="tablist"` + real buttons keep it keyboard/AT accessible.
+      btn = document.createElement("div");
       btn.id = "mode-toggle";
-      btn.className = "mode-toggle";
-      btn.setAttribute("aria-label", "Switch dashboard mode");
-      btn.setAttribute("title", "Switch between Casual and Pro");
+      btn.className = "mode-seg";
+      btn.setAttribute("role", "tablist");
+      btn.setAttribute("aria-label", "Dashboard mode");
       btn.innerHTML =
-        '<i class="bi bi-controller ic-casual" aria-hidden="true"></i>' +
-        '<i class="bi bi-bar-chart-steps ic-pro" aria-hidden="true"></i>' +
-        '<span class="mode-toggle-label" id="mode-toggle-label"></span>';
+        '<span class="mode-seg-indicator" aria-hidden="true"></span>' +
+        '<button type="button" class="mode-seg-btn" role="tab" data-mode="casual" aria-selected="false">' +
+        '<i class="bi bi-controller" aria-hidden="true"></i><span>Casual</span></button>' +
+        '<button type="button" class="mode-seg-btn" role="tab" data-mode="pro" aria-selected="false">' +
+        '<i class="bi bi-bar-chart-steps" aria-hidden="true"></i><span>Pro</span></button>';
       // Insert before the theme toggle so the two sit together.
       var theme = C.$("#theme-toggle", host);
       if (theme) host.insertBefore(btn, theme);
       else host.insertBefore(btn, host.firstChild);
-      btn.addEventListener("click", flipMode);
+      // Each segment selects THAT mode explicitly (spec 3 — onToggle handler).
+      C.$$(".mode-seg-btn", btn).forEach(function (seg) {
+        seg.addEventListener("click", function () { selectMode(seg.getAttribute("data-mode")); });
+        seg.addEventListener("keydown", function (e) {
+          if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+            e.preventDefault();
+            selectMode(seg.getAttribute("data-mode") === "pro" ? "casual" : "pro");
+          }
+        });
+      });
     }
     // Also build the dedicated, ALWAYS-visible rail switch (spec: "+ rail item").
     ensureModeRail();
@@ -152,10 +181,15 @@
     var mode = (C.mode && C.mode.get) ? C.mode.get() : "casual";
     var btn = C.$("#mode-toggle");
     if (btn) {
+      // Drives the sliding active indicator (CSS reads [data-mode]) and the
+      // active/inactive segment states (high-contrast active, muted inactive).
       btn.setAttribute("data-mode", mode);
-      var lbl = C.$("#mode-toggle-label", btn);
-      if (lbl) lbl.textContent = mode === "pro" ? "Pro" : "Casual";
-      btn.setAttribute("aria-pressed", mode === "pro" ? "true" : "false");
+      C.$$(".mode-seg-btn", btn).forEach(function (seg) {
+        var on = seg.getAttribute("data-mode") === mode;
+        seg.classList.toggle("is-active", on);
+        seg.setAttribute("aria-selected", on ? "true" : "false");
+        seg.tabIndex = on ? 0 : -1;
+      });
     }
     var sw = C.$("#rail-mode-switch");
     if (sw) {
