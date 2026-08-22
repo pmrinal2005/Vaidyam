@@ -14,7 +14,7 @@
   var NBSP = "\u00A0";
 
   var statsData = [
-    { title: "INFERENCE COST",      value: "₹0",     footer: "WHAT YOU PAY, PER QUESTION",        details: ["Draft-verify cascade on GroqCloud", "gpt-oss-120b draft + qwen3.6-27b agent", "No subscriptions, no token bills, ever"] },
+    { title: "INFERENCE COST",      value: "₹0",     footer: "WHAT YOU PAY, PER QUESTION",        details: ["Draft-verify cascade on GroqCloud", "gpt-oss-20b draft + gpt-oss-120b agent", "No subscriptions, no token bills, ever"] },
     { title: "DRAFT LATENCY",       value: "<300ms", footer: "TIME TO YOUR FIRST INSIGHT",         details: ["EAGLE feature-level speculation", "Medusa parallel-head fallback", "Most daily check-ins never leave step one"] },
     { title: "SPECIALIST SWARM",    value: "6",      footer: "AI SPECIALISTS, WATCHING 24/7",      details: ["Medication · Sleep · Environment", "Mental health · Nutrition · Coordinator", "Agent-Forest majority voting on hard calls"] },
     { title: "RESEARCH FOUNDATION", value: "11+",    footer: "PUBLISHED SCIENCE, NOT GUESSWORK",   details: ["Speculative decoding, GraphRAG, HippoRAG", "LightRAG, MoA, FrugalGPT, Matryoshka", "Peer-reviewed, stress-tested, real"] },

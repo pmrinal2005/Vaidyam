@@ -21,7 +21,7 @@ import {
   type WeatherOut
 } from './sources'
 import { buildVitals, buildMedications, buildGraph, personalizedPageRank, seedsFromQuery, riskScores, pearson, type Vitals } from './twin'
-import { routeQuery, runSwarm, buildCascade, providers, AGENT_DEFS } from './inference'
+import { routeQuery, runSwarm, buildCascade, providers, AGENT_DEFS, summariseCommunities } from './inference'
 import { CLAIM_DEFS, buildAttestation, dpAggregate, quantizationStats } from './privacy'
 import { simulate, buildLevers, literatureTerms } from './counterfactual'
 import { seeded, clamp, round, gauss, sha256 } from './rand'
@@ -457,6 +457,7 @@ api.post('/checkin', async (c: ApiContext<Bindings>) => {
 api.get('/graph', async (c: ApiContext<Bindings>) => {
   const started = Date.now()
   const ctx = await twinContext(c)
+  const prov = ctx.prov.slice()
   const q = c.req.query('q') || ''
   const seeds = q ? seedsFromQuery(ctx.graph, q) : []
   const ppr = personalizedPageRank(ctx.graph, seeds)
@@ -471,11 +472,29 @@ api.get('/graph', async (c: ApiContext<Bindings>) => {
       return { rank: rank + 1, id, label: node?.label || id, domain: node?.domain, score, hops }
     })
 
+  // GraphRAG stage-2: genuine LLM-generated thematic insight per community
+  // (one batched Groq call). Degrades to the deterministic topology summary
+  // when there is no key / rate cap / failure — the panel always renders.
+  const { insights, live: summariesLive } = await summariseCommunities(c.env, ctx.graph, ctx.vitals)
+  const communities = ctx.graph.communities.map((cm) =>
+    insights[cm.id] ? { ...cm, insight: insights[cm.id] } : cm
+  )
+  prov.push({
+    source: 'GraphRAG community summariser',
+    live: summariesLive,
+    fetchedAt: new Date().toISOString(),
+    detail: summariesLive
+      ? 'live provider inference (openai/gpt-oss-20b)'
+      : 'deterministic topology summary (no provider key)'
+  })
+
   return c.json(
     envelope(
       {
         ...ctx.graph,
         nodes,
+        communities,
+        summariesLive,
         seeds,
         query: q,
         retrieval,
@@ -486,7 +505,7 @@ api.get('/graph', async (c: ApiContext<Bindings>) => {
           seedCount: seeds.length
         }
       },
-      ctx.prov,
+      prov,
       started
     )
   )

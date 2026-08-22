@@ -71,10 +71,14 @@
 
       out += '<div class="c5" style="--i:3">' + C.card({
         title: "Community summaries",
-        note: "GraphRAG stage 2 — pre-generated for closely related entities",
-        icon: "bi-collection",
+        note: d.summariesLive
+          ? "GraphRAG stage 2 — live LLM insight per cluster (gpt-oss-20b)"
+          : "GraphRAG stage 2 — topology summary (add GROQ_API_KEY for live insight)",
+        right: '<span class="badge ' + (d.summariesLive ? "good" : "warn") + '">' +
+          (d.summariesLive ? "live summaries" : "deterministic") + "</span>",
         body: '<div class="row-list scroll-y">' + (d.communities || []).map(function (cm) {
           return '<div class="row"><div class="row-main"><p class="row-title">' + C.esc(cm.label) + "</p>" +
+            (cm.insight ? '<p class="row-sub" style="color:var(--ink-1)">' + C.esc(cm.insight) + "</p>" : "") +
             '<p class="row-sub">' + C.esc(cm.summary) + "</p></div>" +
             '<span class="row-value">' + cm.size + "</span></div>";
         }).join("") + "</div>" +
@@ -230,7 +234,7 @@
       var out = C.viewHead(
         "Layer 3 · draft-verify speculative cascade",
         "Inference Efficiency Cascade",
-        "A GroqCloud gpt-oss-120b draft model speculates most of the answer using EAGLE-style feature-level speculation; the qwen3.6-27b agent model verifies only divergent spans — not a full re-generation. Medusa-style parallel heads engage for multi-branch clinical reasoning, and the same agent model supplies the Agent-Forest voting pool. A FrugalGPT router decides, per query, which stages actually run.",
+        "A GroqCloud gpt-oss-20b draft model speculates most of the answer using EAGLE-style feature-level speculation; the gpt-oss-120b agent model verifies only divergent spans — not a full re-generation. Medusa-style parallel heads engage for multi-branch clinical reasoning, and the same agent model supplies the Agent-Forest voting pool. A FrugalGPT router decides, per query, which stages actually run.",
         '<span class="badge good">acceptance ' + C.fmt.num(d.totals.acceptance * 100, 1) + "%</span>" +
         '<span class="badge info">' + d.totals.latencyMs + "ms end-to-end</span>"
       );

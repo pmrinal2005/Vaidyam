@@ -1,14 +1,19 @@
 /**
  * Layers 2–3 — Multi-Agent Swarm (MoA) + Draft-Verify Speculative Cascade.
  *
- * Single provider: GroqCloud. Two models —
- *   - PRIMARY_MODEL  (llama-3.3-70b-versatile): fast, non-reasoning draft +
- *     the full specialist panel (one batched JSON call → every layer-1 vote &
- *     rationale is LLM-derived, not a deterministic stub).
- *   - AGENT_MODEL    (openai/gpt-oss-120b): the Coordinator synthesis. This is
- *     a production Groq reasoning model driven with `reasoning_format:"hidden"`
+ * Single provider: GroqCloud. Two models (both verified live against the
+ * GroqCloud catalogue — the previous `llama-3.3-70b-versatile` was SHUT DOWN
+ * by Groq on 2026-08-16 and now returns errors, which silently killed every
+ * live layer-1 call and forced the whole swarm onto the deterministic floor):
+ *   - PRIMARY_MODEL  (openai/gpt-oss-20b): fast, cheap, 1K RPM. Drives the
+ *     draft + the full specialist panel (one batched JSON call → every layer-1
+ *     vote & rationale is LLM-derived, not a deterministic stub). It is a
+ *     reasoning model, so we drive it with `reasoning_effort:"low"` +
+ *     `reasoning_format:"hidden"` for tight, low-latency, think-free output.
+ *   - AGENT_MODEL    (openai/gpt-oss-120b): the Coordinator synthesis. A
+ *     production Groq reasoning model driven with `reasoning_format:"hidden"`
  *     so the chain-of-thought never leaks into the message content (the old
- *     `qwen/qwen3.6-27b` emitted raw <think>…</think> into the UI).
+ *     `qwen/qwen3.6-27b` coordinator emitted raw <think>…</think> into the UI).
  *
  * A sliding-window rate limiter caps outbound Groq calls. When the cap is hit,
  * the key is absent, or a call fails, the affected stage falls back to the
@@ -21,14 +26,21 @@ import type { Vitals } from './twin'
 
 export type ProviderId = 'groq'
 
-// Groq models (verified against the live GroqCloud model catalogue):
-//   - PRIMARY_MODEL: fast, high-quality, NO reasoning tags → draft + panel.
-//   - AGENT_MODEL:   strong reasoning model → Coordinator (reasoning hidden).
-export const PRIMARY_MODEL = 'llama-3.3-70b-versatile'
+// Groq models (verified live against the GroqCloud model catalogue on
+// 2026-08-22 — https://console.groq.com/docs/models):
+//   - PRIMARY_MODEL: openai/gpt-oss-20b — fast (1000 T/s), cheap, 1K RPM →
+//     draft + batched specialist panel. Reasoning hidden so no <think> leaks.
+//   - AGENT_MODEL:   openai/gpt-oss-120b — strong reasoning model →
+//     Coordinator synthesis (reasoning hidden).
+// NOTE: `llama-3.3-70b-versatile` (the old PRIMARY_MODEL) was deprecated and
+// shut down by Groq on 2026-08-16; requests to it now error, so it must NOT be
+// used — doing so is exactly what forced the swarm to the deterministic floor.
+export const PRIMARY_MODEL = 'openai/gpt-oss-20b'
 export const AGENT_MODEL = 'openai/gpt-oss-120b'
 
 /** Models whose responses may contain <think>…</think> chain-of-thought that
- *  must be requested hidden AND stripped defensively. */
+ *  must be requested hidden AND stripped defensively. All current Groq
+ *  first-class chat models are reasoning models, so both of ours are listed. */
 const REASONING_MODELS = new Set<string>([
   'openai/gpt-oss-120b',
   'openai/gpt-oss-20b',
@@ -159,10 +171,25 @@ export function stripReasoning(raw: string): string {
  * deterministic synthesis.
  */
 export function enforceConcise(raw: string, maxWords = 60): string {
-  let t = stripReasoning(raw)
+  const rawStr = String(raw || '')
+  // Inspect the RAW text FIRST for leaked-reasoning shapes, before
+  // stripReasoning() removes the markdown/bold markers those shapes rely on.
+  // This is the guard that stops the reported coordinator leak — e.g.
+  // "Here's a thinking process: 1. **Analyze User Input:** …" — from ever
+  // reaching the card. When detected, we bail so the caller uses the clean
+  // deterministic synthesis instead.
+  const looksLikePlanning =
+    /thinking process|here'?s? (?:a|my) (?:thinking|reasoning|plan)|let me (?:think|analyze|start|break)|step[\s-]*by[\s-]*step/i.test(rawStr) ||
+    // Opening numbered/bulleted item followed by a bold header (classic
+    // gpt-oss/qwen "1. **Analyze …**" chain-of-thought scaffold).
+    /^\s*(?:\d+\.|[-*])\s*\*\*/.test(rawStr) ||
+    // Dominated by bold headers ⇒ a planning outline, not a recommendation.
+    (rawStr.match(/\*\*/g) || []).length >= 4
+  if (looksLikePlanning) return ''
+
+  let t = stripReasoning(rawStr)
   if (!t) return ''
-  // Reject obvious leaked-reasoning residue (numbered planning, "thinking
-  // process", stray tags) rather than show it.
+  // Reject any residue that still reads as leaked chain-of-thought.
   if (/<\/?(?:think|reason)/i.test(t)) return ''
   if (/thinking process|let me (?:think|analyze|start)|step 1[:.)]/i.test(t)) return ''
   // Cap to the first few sentences, then to a hard word budget.
@@ -185,7 +212,7 @@ async function chat(
   messages: { role: string; content: string }[],
   maxTokens = 160,
   timeoutMs = 9000,
-  opts?: { json?: boolean }
+  opts?: { json?: boolean; reasoningEffort?: 'none' | 'low' | 'medium' | 'high' }
 ): Promise<{ text: string; ms: number; tokensIn: number; tokensOut: number } | null> {
   if (!cfg.key) return null
   if (!rateOk()) return null
@@ -193,16 +220,26 @@ async function chat(
   try {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+    // gpt-oss reasoning models spend their token budget on hidden thinking
+    // BEFORE the answer. Groq caps completions with `max_completion_tokens`
+    // (the newer field) — we send both so the whole budget is never eaten by
+    // reasoning and truncates the real content.
     const body: Record<string, unknown> = {
       model,
       messages,
       max_tokens: maxTokens,
+      max_completion_tokens: maxTokens,
       temperature: 0.3,
       top_p: 0.9,
       stream: false
     }
-    // Hide chain-of-thought for reasoning models so <think> never leaks.
-    if (REASONING_MODELS.has(model)) body.reasoning_format = 'hidden'
+    // Hide chain-of-thought for reasoning models so <think> never leaks, and
+    // keep the reasoning cheap/fast so it neither dominates latency nor eats
+    // the token budget. Default to "low" effort for our reasoning models.
+    if (REASONING_MODELS.has(model)) {
+      body.reasoning_format = 'hidden'
+      body.reasoning_effort = opts?.reasoningEffort || 'low'
+    }
     // Ask for strict JSON where the caller parses structured output.
     if (opts?.json) body.response_format = { type: 'json_object' }
     const res = await fetch(`${cfg.base}/chat/completions`, {
@@ -350,6 +387,94 @@ function coerceVote(v: unknown, fallback: string): string {
 }
 
 /**
+ * GraphRAG stage-2 community summarisation, done for real.
+ *
+ * The static `summary` on each community ("N entities · M incident edges ·
+ * mean strength X") is topology metadata, not an *insight*. This adds a genuine
+ * LLM-generated one-line thematic insight per community in ONE batched Groq
+ * JSON call, so the Causal Knowledge Graph panel is no longer a fixed template.
+ *
+ * Returns a map { communityId → insight } and a `live` flag. When there is no
+ * key / the rate cap is hit / the call fails, `live` is false and the map is
+ * empty, so the caller keeps the deterministic topology summary — nothing ever
+ * throws or blocks the graph from rendering.
+ */
+export async function summariseCommunities(
+  env: Bindings | undefined | null,
+  graph: CausalGraph,
+  vitals: Vitals[]
+): Promise<{ insights: Record<number, string>; live: boolean }> {
+  const cfg = providers(env).find((p) => p.key)
+  if (!cfg) return { insights: {}, live: false }
+
+  // Compact, factual brief per community: members + the strongest incident
+  // causal edges. The model summarises ONLY this — it invents no numbers.
+  const last14 = vitals.slice(-14)
+  const mean = (k: keyof Vitals) => last14.reduce((a, b) => a + Number(b[k]), 0) / Math.max(1, last14.length)
+  const briefs = graph.communities
+    .map((cm) => {
+      const members = graph.nodes.filter((n) => n.community === cm.id).map((n) => n.label)
+      const edges = graph.edges
+        .filter((e) => {
+          const sc = graph.nodes.find((n) => n.id === e.source)?.community
+          const tc = graph.nodes.find((n) => n.id === e.target)?.community
+          return sc === cm.id || tc === cm.id
+        })
+        .slice()
+        .sort((a, b) => b.strength - a.strength)
+        .slice(0, 3)
+        .map((e) => {
+          const s = graph.nodes.find((n) => n.id === e.source)?.label || e.source
+          const t = graph.nodes.find((n) => n.id === e.target)?.label || e.target
+          return `${s} ${e.relation} ${t} (${e.strength})`
+        })
+      return `#${cm.id} ${cm.label}: entities=[${members.join(', ')}]; edges=[${edges.join('; ')}]`
+    })
+    .join('\n')
+
+  const res = await chat(
+    cfg,
+    PRIMARY_MODEL,
+    [
+      {
+        role: 'system',
+        content:
+          'You are the Vaidyam GraphRAG community summariser. For EACH community, write ONE concise thematic insight ' +
+          '(≤ 18 words) describing what the cluster means for this person, grounded ONLY in the supplied entities and ' +
+          'causal edges. Invent no numbers. No markdown, no lists, no chain-of-thought. ' +
+          'Return STRICT JSON: {"summaries":{"<communityId>":"insight"}}.'
+      },
+      {
+        role: 'user',
+        content: `14-day context — sleep ${round(mean('sleepHours'), 1)}h, systolic ${Math.round(
+          mean('systolic')
+        )}mmHg, HRV ${Math.round(mean('hrv'))}ms, adherence ${Math.round(mean('adherence'))}%.\nCommunities:\n${briefs}`
+      }
+    ],
+    700,
+    12000,
+    { json: true, reasoningEffort: 'low' }
+  )
+  if (!res) return { insights: {}, live: false }
+
+  try {
+    const parsed = JSON.parse(res.text)
+    const raw = parsed?.summaries && typeof parsed.summaries === 'object' ? parsed.summaries : parsed
+    if (!raw || typeof raw !== 'object') return { insights: {}, live: false }
+    const insights: Record<number, string> = {}
+    for (const [k, v] of Object.entries(raw)) {
+      const id = Number(k)
+      if (!Number.isFinite(id)) continue
+      const clean = enforceConcise(String(v), 22)
+      if (clean) insights[id] = clean
+    }
+    return { insights, live: Object.keys(insights).length > 0 }
+  } catch {
+    return { insights: {}, live: false }
+  }
+}
+
+/**
  * Runs the MoA swarm. Layer-1 specialists run as ONE batched, live
  * Mixture-of-Agents panel (a single Groq JSON call returns every specialist's
  * vote + concise rationale + confidence — so the layer-1 verdicts are genuine
@@ -405,9 +530,9 @@ export async function runSwarm(
           content: `${opts.contextBrief}\nSpecialists: ${roster}\nUser question: ${opts.query}`
         }
       ],
-      520,
-      9000,
-      { json: true }
+      900,
+      12000,
+      { json: true, reasoningEffort: 'low' }
     )
     if (res) {
       try {
@@ -516,7 +641,12 @@ export async function runSwarm(
             .join(', ')}\nBallot tally: ${JSON.stringify(distribution)}\nUser question: ${opts.query}`
         }
       ],
-      220
+      // gpt-oss-120b is a reasoning model: give it enough budget that the
+      // hidden thinking never crowds out the ≤40-word answer, and keep the
+      // effort low so latency and cost stay bounded.
+      512,
+      12000,
+      { reasoningEffort: 'low' }
     )
     // stripReasoning already ran inside chat(); enforce a final safety clamp so
     // a runaway response can never dominate the card, and reject any residue

@@ -48,7 +48,7 @@ export type GraphEdge = {
 export type CausalGraph = {
   nodes: GraphNode[]
   edges: GraphEdge[]
-  communities: { id: number; label: string; summary: string; size: number }[]
+  communities: { id: number; label: string; summary: string; size: number; insight?: string }[]
   stats: { nodes: number; edges: number; density: number; avgDegree: number; version: string }
 }
 

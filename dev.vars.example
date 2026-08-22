@@ -52,7 +52,7 @@ USDA_API_KEY=
 #            causal graph. Every panel still renders real numbers derived from
 #            the twin; the provenance strip reports "deterministic graph
 #            reasoner (no provider key)" and the live chip reads degraded.
-# Single provider: GroqCloud. Models: openai/gpt-oss-120b (primary draft) and
+# Single provider: GroqCloud. Models: openai/gpt-oss-20b (fast draft + panel) and
 # qwen/qwen3.6-27b (agentic/multi-call). Outbound calls are capped at 3/min.
 
 # GroqCloud — https://console.groq.com/keys
