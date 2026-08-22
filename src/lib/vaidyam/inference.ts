@@ -96,22 +96,81 @@ function rateOk(): boolean {
  */
 export function stripReasoning(raw: string): string {
   let t = String(raw || '')
-  // Remove complete <think>…</think> (and <thinking>, <reasoning>) blocks.
-  t = t.replace(/<(think|thinking|reason|reasoning)>[\s\S]*?<\/\1>/gi, '')
-  // Remove a dangling opener with no closer (truncated by max_tokens): drop
-  // everything from the opener onward, since it's unterminated reasoning.
-  t = t.replace(/<(think|thinking|reason|reasoning)>[\s\S]*$/i, '')
-  // Remove any orphan closing tag left behind.
-  t = t.replace(/<\/?(think|thinking|reason|reasoning)>/gi, '')
-  // Strip Markdown code fences / stray backticks.
+
+  // 1. Remove complete <think>…</think> (and <thinking>/<reason>/<reasoning>,
+  //    plus square-bracket [think]…[/think] variants some models emit).
+  t = t.replace(/<(think|thinking|reason|reasoning)>[\s\S]*?<\/\1>/gi, ' ')
+  t = t.replace(/\[(think|thinking|reason|reasoning)\][\s\S]*?\[\/\1\]/gi, ' ')
+
+  // 2. If a CLOSING tag exists WITHOUT a matching opener, everything before it
+  //    was untagged reasoning (the model "thought" then closed the block) —
+  //    keep only what follows the final closing tag.
+  const closeMatch = t.match(/<\/(?:think|thinking|reason|reasoning)>/gi)
+  if (closeMatch) {
+    const idx = t.toLowerCase().lastIndexOf('</think>')
+    const alt = Math.max(
+      t.toLowerCase().lastIndexOf('</thinking>'),
+      t.toLowerCase().lastIndexOf('</reason>'),
+      t.toLowerCase().lastIndexOf('</reasoning>'),
+    )
+    const cut = Math.max(idx, alt)
+    if (cut >= 0) t = t.slice(t.indexOf('>', cut) + 1)
+  }
+
+  // 3. Remove a dangling OPENER with no closer (truncated by max_tokens): drop
+  //    everything from the opener onward, since it is unterminated reasoning.
+  t = t.replace(/<(think|thinking|reason|reasoning)>[\s\S]*$/i, ' ')
+  t = t.replace(/\[(think|thinking|reason|reasoning)\][\s\S]*$/i, ' ')
+
+  // 4. Remove any orphan tags left behind.
+  t = t.replace(/<\/?(think|thinking|reason|reasoning)>/gi, ' ')
+
+  // 5. Strip Markdown code fences / stray backticks and bold/italic markers.
   t = t.replace(/```[a-z]*\n?/gi, '').replace(/`/g, '')
-  // Collapse whitespace and trim.
+  t = t.replace(/\*\*(.*?)\*\*/g, '$1')
+
+  // 6. Collapse whitespace and trim.
   t = t.replace(/\s+/g, ' ').trim()
-  // Drop a leading list marker or label the model sometimes prepends.
-  t = t.replace(/^(?:[-*•]\s+|(?:answer|verdict|recommendation)\s*:\s*)/i, '')
-  // Remove wrapping quotes.
+
+  // 7. Drop common untagged reasoning preambles the model sometimes prepends
+  //    before the real answer (belt-and-braces for models ignoring the tag
+  //    request). If a recognised preamble is found, keep only the text after
+  //    the LAST such marker.
+  const preambleRe = /(?:here'?s?\s+(?:a|my)\s+thinking\s+process|let me think|reasoning\s*:|thinking\s*:|step[\s-]*by[\s-]*step)\b/gi
+  if (preambleRe.test(t)) {
+    // Prefer text after an explicit final-answer marker if present.
+    const ans = t.match(/(?:final\s+answer|recommendation|answer|verdict)\s*:\s*([\s\S]+)$/i)
+    if (ans && ans[1] && ans[1].trim().length > 8) t = ans[1].trim()
+  }
+
+  // 8. Drop a leading list marker or label the model sometimes prepends.
+  t = t.replace(/^(?:[-*•]\s+|(?:final\s+answer|answer|verdict|recommendation)\s*:\s*)/i, '')
+
+  // 9. Remove wrapping quotes.
   t = t.replace(/^["'“”]+|["'“”]+$/g, '').trim()
   return t
+}
+
+/**
+ * Final safety clamp for prose the UI displays verbatim (coordinator card).
+ * Rejects any residue that still reads as leaked chain-of-thought, and caps the
+ * length to a few sentences so a runaway generation can never dominate the
+ * panel. Returns '' when the text is unusable so the caller falls back to the
+ * deterministic synthesis.
+ */
+export function enforceConcise(raw: string, maxWords = 60): string {
+  let t = stripReasoning(raw)
+  if (!t) return ''
+  // Reject obvious leaked-reasoning residue (numbered planning, "thinking
+  // process", stray tags) rather than show it.
+  if (/<\/?(?:think|reason)/i.test(t)) return ''
+  if (/thinking process|let me (?:think|analyze|start)|step 1[:.)]/i.test(t)) return ''
+  // Cap to the first few sentences, then to a hard word budget.
+  const sentences = t.match(/[^.!?]+[.!?]+/g)
+  if (sentences && sentences.length > 3) t = sentences.slice(0, 3).join(' ').trim()
+  const words = t.split(/\s+/)
+  if (words.length > maxWords) t = words.slice(0, maxWords).join(' ').replace(/[,;:]$/, '') + '…'
+  return t.trim()
 }
 
 /**
@@ -158,8 +217,13 @@ async function chat(
     clearTimeout(timer)
     if (!res.ok) return null
     const j: any = await res.json()
-    const text = j?.choices?.[0]?.message?.content
-    if (!text) return null
+    const msg = j?.choices?.[0]?.message || {}
+    // With reasoning_format:"hidden" Groq returns the chain-of-thought in a
+    // SEPARATE `reasoning` field and leaves `content` clean. We deliberately
+    // read ONLY `content` — the reasoning field is never surfaced — so no
+    // <think> can ever reach the UI even if the model is a reasoning model.
+    const text = msg?.content
+    if (!text || !String(text).trim()) return null
     // JSON callers parse the raw content themselves (only strip fences); prose
     // callers get the full reasoning-scrub.
     const cleaned = opts?.json
@@ -366,7 +430,10 @@ export async function runSwarm(
     const p = panel[def.id] || {}
     const liveThis = live && (p.vote !== undefined || p.rationale !== undefined)
     const vote = liveThis ? coerceVote(p.vote, local.vote) : local.vote
-    const rationale = liveThis && p.rationale ? stripReasoning(String(p.rationale)) : local.rationale
+    // Clean + clamp the live rationale; if it comes back empty/leaky, keep the
+    // deterministic one so the card never shows a blank or a <think> fragment.
+    const liveRationale = liveThis && p.rationale ? enforceConcise(String(p.rationale), 34) : ''
+    const rationale = liveRationale || local.rationale
     const confidence =
       liveThis && typeof p.confidence === 'number'
         ? round(clamp(p.confidence, 0.4, 0.99), 2)
@@ -409,7 +476,20 @@ export async function runSwarm(
 
   const coordDef = AGENT_DEFS.find((a) => a.layer === 2)!
   const coordLocal = localReason(coordDef.id, opts.graph, opts.vitals, opts.ppr)
-  let coordRationale = coordLocal.rationale
+  // Concise deterministic synthesis for the fallback — a single readable
+  // sentence derived from the consensus + the two strongest specialist signals,
+  // rather than the generic multi-layer template. Used verbatim when the live
+  // coordinator call is unavailable, and as the safety net if the live text
+  // comes back empty after reasoning-strip.
+  const strongest = results.slice().sort((a, b) => b.confidence - a.confidence).slice(0, 2)
+  const verb = String(winner[0]) === 'intervene' ? 'Act now on' : String(winner[0]) === 'reinforce' ? 'Reinforce' : 'Maintain'
+  const localSynthesis =
+    `${verb} the ${strongest[0]?.domain || 'primary'} pathway — ` +
+    `${strongest.map((s) => `${s.domain} (${s.vote})`).join(' and ')} carry the consensus. ` +
+    (opts.query && /chest pain|shortness of breath|suicid|bleed|stroke|emergency|severe|doctor|hospital|dangerous/.test(opts.query.toLowerCase())
+      ? 'This looks clinically consequential — review with a clinician promptly.'
+      : 'Decision-support only; not a diagnosis.')
+  let coordRationale = localSynthesis
   let coordMs = Math.round(clamp(gauss(rng, 520, 160), 190, 1500))
   let coordTokens = Math.round(clamp(gauss(rng, 200, 60), 80, 480))
   let coordLive = false
@@ -424,8 +504,9 @@ export async function runSwarm(
           role: 'system',
           content:
             'You are the Vaidyam Preventive-Care Coordinator. Read the specialist votes and synthesise ONE clear recommendation. ' +
-            'Answer in ≤ 40 words, plain prose, cite the single dominant causal chain. ' +
-            'Do NOT show your reasoning, do NOT use <think> tags, output only the final recommendation. ' +
+            'CRITICAL OUTPUT RULES: respond with ONLY the final recommendation as one short paragraph of plain prose, ≤ 40 words. ' +
+            'Do NOT think out loud. Do NOT include any analysis, steps, or planning. Do NOT emit <think> tags, headings, lists, or markdown. ' +
+            'Cite the single dominant causal chain (e.g. "sleep→HRV"). ' +
             'No diagnosis; if the query is high-stakes, advise clinician review.'
         },
         {
@@ -437,12 +518,18 @@ export async function runSwarm(
       ],
       220
     )
+    // stripReasoning already ran inside chat(); enforce a final safety clamp so
+    // a runaway response can never dominate the card, and reject any residue
+    // that still smells like leaked reasoning.
     if (res && res.text) {
-      live = true
-      coordLive = true
-      coordRationale = res.text
-      coordMs = res.ms
-      coordTokens = res.tokensOut || coordTokens
+      const clean = enforceConcise(res.text)
+      if (clean) {
+        live = true
+        coordLive = true
+        coordRationale = clean
+        coordMs = res.ms
+        coordTokens = res.tokensOut || coordTokens
+      }
     }
   }
 
