@@ -22,21 +22,240 @@
     }[aura] || [C.hue("mint"), C.hue("blue")];
   }
 
-  /* Living-twin avatar: an abstract glowing graph-person whose breathing rate
-     + colour reflect integrity (aura) and top risk / AQI. Pure SVG + CSS. */
+  /* Living-twin avatar: an interactive, lightweight 3D sphere (WebGL via
+     Three.js, CDN-loaded) with stylized eyes + lips on the front face that
+     dynamically follow the user's cursor. Keeps the original neon-glow aura /
+     colour scheme (breathing rate + hue reflect integrity, AQI and top risk).
+     A pure-CSS orb is rendered underneath as an instant, zero-dependency
+     fallback for reduced-motion, WebGL-less, or slow-to-load environments. */
   function avatar(level, air, topRisk) {
     var cols = auraColors(level.aura);
     var breath = air && air.aqi > 150 ? "3.4s" : air && air.aqi > 100 ? "4.2s" : "6s";
     var riskPulse = topRisk && topRisk.score >= 62 ? "twin-risk-hot" : "";
+    // Stash the live avatar params so the deferred 3D init (in `after`) can read
+    // the current aura colours / breathing cadence without re-plumbing them.
+    C._twinAvatar = {
+      a1: cols[0], a2: cols[1],
+      breath: parseFloat(breath) || 6,
+      hot: !!(topRisk && topRisk.score >= 62),
+      integrity: level.integrity != null ? level.integrity : 60
+    };
     return (
-      '<div class="twin-avatar ' + riskPulse + '" style="--a1:' + cols[0] + ';--a2:' + cols[1] + ';--breath:' + breath + '" aria-hidden="true">' +
-      '<div class="twin-orb"><div class="twin-orb-core"></div><div class="twin-orb-ring"></div><div class="twin-orb-ring r2"></div></div>' +
-      '<div class="twin-particles">' +
+      '<div class="twin-avatar ' + riskPulse + '" style="--a1:' + cols[0] + ';--a2:' + cols[1] + ';--breath:' + breath + '">' +
+      // 3D canvas mount — filled in by initTwin3D(); labelled for a11y.
+      '<div id="twin-3d" class="twin-3d" role="img" aria-label="Interactive 3D health-twin avatar whose eyes follow your cursor"></div>' +
+      // CSS-orb fallback (also the instant first paint before WebGL is ready).
+      '<div class="twin-orb twin-orb-fallback" aria-hidden="true"><div class="twin-orb-core"></div><div class="twin-orb-ring"></div><div class="twin-orb-ring r2"></div></div>' +
+      '<div class="twin-particles" aria-hidden="true">' +
       Array.apply(null, Array(10)).map(function (_, i) {
         return '<span class="tp tp' + i + '"></span>';
       }).join("") +
       "</div></div>"
     );
+  }
+
+  /* ── Lazy CDN script loader (cached; resolves once) ── */
+  var _scriptCache = {};
+  function loadScript(src) {
+    if (_scriptCache[src]) return _scriptCache[src];
+    _scriptCache[src] = new Promise(function (resolve, reject) {
+      var s = document.createElement("script");
+      s.src = src; s.async = true; s.crossOrigin = "anonymous";
+      s.onload = function () { resolve(); };
+      s.onerror = function () { reject(new Error("failed to load " + src)); };
+      document.head.appendChild(s);
+    });
+    return _scriptCache[src];
+  }
+
+  var THREE_CDN = "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js";
+
+  /* ══════════════ Interactive 3D twin sphere ══════════════
+     Lightweight: one low-poly sphere + a few tiny meshes for eyes/lips, no
+     textures, no post-processing, capped DPR, pauses when off-screen/tab hidden
+     so it stays friendly on low-resource hardware. Eyes track the cursor. */
+  function initTwin3D() {
+    var mount = C.$("#twin-3d");
+    if (!mount) return;
+    // Respect reduced-motion + prior failures: keep the CSS fallback only.
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (C._twin3DFailed) return;
+
+    loadScript(THREE_CDN).then(function () {
+      var THREE = window.THREE;
+      if (!THREE || !C.$("#twin-3d")) return;
+      try { buildTwinScene(THREE, C.$("#twin-3d")); }
+      catch (e) { C._twin3DFailed = true; /* CSS fallback remains visible */ }
+    }).catch(function () { C._twin3DFailed = true; });
+  }
+
+  function hexToColor(THREE, hex) {
+    try { return new THREE.Color(hex); } catch (e) { return new THREE.Color("#7cf5c4"); }
+  }
+
+  function buildTwinScene(THREE, mount) {
+    // Tear down any previous instance (view re-renders on every check-in).
+    if (C._twinTeardown) { try { C._twinTeardown(); } catch (e) {} C._twinTeardown = null; }
+    mount.innerHTML = "";
+
+    var params = C._twinAvatar || { a1: "#7cf5c4", a2: "#6ee7f5", breath: 6, hot: false, integrity: 60 };
+    var col1 = hexToColor(THREE, params.a1);
+    var col2 = hexToColor(THREE, params.a2);
+
+    var W = mount.clientWidth || 150, H = mount.clientHeight || 150;
+    var scene = new THREE.Scene();
+    var camera = new THREE.PerspectiveCamera(38, W / H, 0.1, 100);
+    camera.position.set(0, 0, 6);
+
+    var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "low-power" });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75)); // cap DPR for low-end GPUs
+    renderer.setSize(W, H, false);
+    renderer.setClearColor(0x000000, 0);
+    mount.appendChild(renderer.domElement);
+    renderer.domElement.style.display = "block";
+
+    // Root group so the whole twin (body + face) breathes / reacts together.
+    var twin = new THREE.Group();
+    scene.add(twin);
+
+    // ── Glowing body sphere (neon aura) — low poly, cheap ──
+    var bodyGeo = new THREE.SphereGeometry(1.5, 32, 24);
+    var bodyMat = new THREE.MeshStandardMaterial({
+      color: col1, emissive: col1.clone().multiplyScalar(0.55),
+      roughness: 0.32, metalness: 0.12, transparent: true, opacity: 0.96
+    });
+    var body = new THREE.Mesh(bodyGeo, bodyMat);
+    twin.add(body);
+
+    // Soft outer glow shell (additive, back-side) for the neon halo.
+    var glowGeo = new THREE.SphereGeometry(1.72, 24, 18);
+    var glowMat = new THREE.MeshBasicMaterial({
+      color: col2, transparent: true, opacity: 0.16,
+      side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    twin.add(new THREE.Mesh(glowGeo, glowMat));
+
+    // ── Face group (eyes + lips) sits on the front of the sphere ──
+    var face = new THREE.Group();
+    twin.add(face);
+
+    var eyeWhiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x9fb8c9, emissiveIntensity: 0.35, roughness: 0.25 });
+    var pupilMat = new THREE.MeshStandardMaterial({ color: 0x0b0d10, roughness: 0.2, metalness: 0.1 });
+
+    function makeEye(x) {
+      var g = new THREE.Group();
+      var white = new THREE.Mesh(new THREE.SphereGeometry(0.34, 20, 16), eyeWhiteMat);
+      white.scale.set(1, 1.15, 0.6);
+      var pupil = new THREE.Mesh(new THREE.SphereGeometry(0.155, 16, 12), pupilMat);
+      pupil.position.set(0, 0, 0.26);
+      g.add(white); g.add(pupil);
+      g.position.set(x, 0.42, 1.32);
+      g._pupil = pupil;
+      face.add(g);
+      return g;
+    }
+    var leftEye = makeEye(-0.5);
+    var rightEye = makeEye(0.5);
+
+    // ── Stylized lips (a smiling curve made from a thin torus arc) ──
+    var lipMat = new THREE.MeshStandardMaterial({ color: col2, emissive: col2.clone().multiplyScalar(0.5), roughness: 0.3, metalness: 0.15 });
+    var lips = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.075, 12, 28, Math.PI), lipMat);
+    // Rotate the half-torus so its open side faces up → a smile.
+    lips.rotation.z = Math.PI;
+    lips.position.set(0, -0.34, 1.34);
+    face.add(lips);
+
+    // ── Lights (cheap: one ambient + two coloured points echoing the aura) ──
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    var key = new THREE.PointLight(col1.getHex(), 1.4, 20); key.position.set(3, 3, 5); scene.add(key);
+    var fill = new THREE.PointLight(col2.getHex(), 1.0, 20); fill.position.set(-3, -1, 4); scene.add(fill);
+
+    // ── Interaction: track pointer relative to this element's viewport ──
+    var target = { x: 0, y: 0 };      // normalized -1..1 within the avatar rect
+    var current = { x: 0, y: 0 };     // eased follow
+    function onPointer(e) {
+      var r = mount.getBoundingClientRect();
+      var px = (e.clientX - r.left) / r.width;   // 0..1
+      var py = (e.clientY - r.top) / r.height;   // 0..1
+      target.x = Math.max(-1, Math.min(1, (px - 0.5) * 2));
+      target.y = Math.max(-1, Math.min(1, (py - 0.5) * 2));
+    }
+    // Listen on the whole window so the eyes follow the cursor everywhere,
+    // per spec (cursor position relative to the element viewport).
+    window.addEventListener("pointermove", onPointer, { passive: true });
+
+    // Pause rendering when the avatar scrolls off-screen or the tab is hidden.
+    var visible = true;
+    var io = null;
+    if ("IntersectionObserver" in window) {
+      io = new IntersectionObserver(function (entries) {
+        visible = entries[0] && entries[0].isIntersecting;
+      }, { threshold: 0.05 });
+      io.observe(mount);
+    }
+    function onVisChange() { /* raf loop checks document.hidden */ }
+    document.addEventListener("visibilitychange", onVisChange);
+
+    // Resize handling (rail collapse / responsive hero).
+    function onResize() {
+      var w = mount.clientWidth || 150, h = mount.clientHeight || 150;
+      if (!w || !h) return;
+      camera.aspect = w / h; camera.updateProjectionMatrix();
+      renderer.setSize(w, h, false);
+    }
+    var ro = null;
+    if ("ResizeObserver" in window) { ro = new ResizeObserver(onResize); ro.observe(mount); }
+
+    // ── Animation loop ──
+    var raf = 0, t0 = performance.now();
+    var breathSpeed = (2 * Math.PI) / ((params.breath || 6) * 1000); // rad per ms
+    function frame(now) {
+      raf = requestAnimationFrame(frame);
+      if (!visible || document.hidden) return; // save cycles when not shown
+      var t = now - t0;
+
+      // Breathing scale — echoes the CSS orb's cadence + integrity.
+      var amp = 0.05 + (params.hot ? 0.03 : 0);
+      var s = 1 + Math.sin(t * breathSpeed) * amp;
+      twin.scale.set(s, s, s);
+
+      // Gentle idle rotation of the body only (face stays forward).
+      body.rotation.y = Math.sin(t * 0.00035) * 0.18;
+      body.rotation.x = Math.cos(t * 0.0003) * 0.08;
+
+      // Ease toward pointer; twin tilts slightly, eyes track more strongly.
+      current.x += (target.x - current.x) * 0.08;
+      current.y += (target.y - current.y) * 0.08;
+      twin.rotation.y = current.x * 0.28;
+      twin.rotation.x = -current.y * 0.18;
+
+      // Pupils shift within the eye to face the cursor.
+      var pxShift = current.x * 0.12, pyShift = -current.y * 0.1;
+      leftEye._pupil.position.x = pxShift; leftEye._pupil.position.y = pyShift;
+      rightEye._pupil.position.x = pxShift; rightEye._pupil.position.y = pyShift;
+
+      renderer.render(scene, camera);
+    }
+    raf = requestAnimationFrame(frame);
+
+    // Signal success so CSS can fade the fallback orb out.
+    mount.setAttribute("data-ready", "1");
+
+    // Teardown to avoid leaks across re-renders.
+    C._twinTeardown = function () {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("pointermove", onPointer);
+      document.removeEventListener("visibilitychange", onVisChange);
+      if (io) io.disconnect();
+      if (ro) ro.disconnect();
+      try {
+        bodyGeo.dispose(); glowGeo.dispose(); lips.geometry.dispose();
+        renderer.dispose();
+      } catch (e) {}
+      if (renderer.domElement && renderer.domElement.parentNode) {
+        renderer.domElement.parentNode.removeChild(renderer.domElement);
+      }
+    };
   }
 
   function questCard(q) {
@@ -57,11 +276,16 @@
     );
   }
 
+  /* Casual-overview vibe KPIs use clean vector (SVG) tech icons instead of
+     emojis — one Bootstrap-Icons glyph per domain, tinted to its hue. */
+  var VIBE_ICON = { sleep: "bi-moon-stars-fill", mood: "bi-emoji-smile-fill", energy: "bi-heart-pulse-fill", env: "bi-wind" };
+
   function vibeCell(v, key) {
     var hue = { sleep: "blue", mood: "violet", energy: "rose", env: "cyan" }[key] || "mint";
+    var icon = VIBE_ICON[key] || "bi-activity";
     return (
       '<div class="vibe-cell ' + (v.good ? "vibe-good" : "vibe-watch") + '" style="--vh:' + C.hue(hue) + '" tabindex="0" data-vibe="' + key + '">' +
-      '<span class="vibe-emoji">' + v.emoji + "</span>" +
+      '<span class="vibe-ico"><i class="bi ' + icon + '" aria-hidden="true"></i></span>' +
       '<span class="vibe-num">' + C.fmt.num(v.value, v.unit === "h" || v.unit === "/10" ? 1 : 0) + '<small>' + C.esc(v.unit) + "</small></span>" +
       '<span class="vibe-label">' + C.esc(v.label) + "</span>" +
       "</div>"
@@ -121,10 +345,10 @@
         note: "tap any card to expand the science",
         icon: "bi-emoji-smile",
         body: '<div class="vibe-grid">' +
-          vibeCell(vibe.sleep || { value: 0, label: "Sleep", emoji: "😴", unit: "h", good: false }, "sleep") +
-          vibeCell(vibe.mood || { value: 0, label: "Mood", emoji: "🙂", unit: "/10", good: false }, "mood") +
-          vibeCell(vibe.energy || { value: 0, label: "Energy", emoji: "🔋", unit: "ms", good: false }, "energy") +
-          vibeCell(vibe.env || { value: 0, label: "Air", emoji: "🌤️", unit: "AQI", good: false }, "env") +
+          vibeCell(vibe.sleep || { value: 0, label: "Sleep", unit: "h", good: false }, "sleep") +
+          vibeCell(vibe.mood || { value: 0, label: "Mood", unit: "/10", good: false }, "mood") +
+          vibeCell(vibe.energy || { value: 0, label: "Energy", unit: "ms", good: false }, "energy") +
+          vibeCell(vibe.env || { value: 0, label: "Air", unit: "AQI", good: false }, "env") +
           "</div>" +
           '<div id="vibe-expand" class="vibe-expand" hidden></div>'
       }) + "</div>";
@@ -139,7 +363,7 @@
           '<div class="story-card">' +
           '<p class="story-lead">' + C.esc(storyLine(topIns, d)) + "</p>" +
           '<div class="story-meta"><span class="badge ' + (Math.abs(topIns.r) > 0.45 ? "good" : "") + '">strength ' + stars(Math.abs(topIns.r)) + "</span>" +
-          '<button type="button" class="btn btn-tiny sci-toggle" data-sci-toggle>🔬 science</button></div>' +
+          '<button type="button" class="btn btn-tiny sci-toggle" data-sci-toggle><i class="bi bi-eyedropper"></i> science</button></div>' +
           '<div class="story-sci" hidden><p class="tiny mono">Pearson r = ' + C.fmt.num(topIns.r, 2) + " over the twin's 30-day series · " + C.esc(topIns.label) + "</p>" +
           '<button type="button" class="btn btn-tiny" data-goto="graph"><i class="bi bi-share"></i> Explore causal path</button></div>' +
           "</div>" +
@@ -204,7 +428,7 @@
         body:
           '<div class="badge-share">' +
           '<div class="zk-sticker" style="--aura1:' + auraColors(level.aura)[0] + ';--aura2:' + auraColors(level.aura)[1] + '">' +
-          '<span class="zk-emoji">🏅</span><span class="zk-tier">' + C.esc((g.badge && g.badge.claim) || ("Level " + level.level)) + "</span>" +
+          '<span class="zk-emoji"><i class="bi bi-award-fill" aria-hidden="true"></i></span><span class="zk-tier">' + C.esc((g.badge && g.badge.claim) || ("Level " + level.level)) + "</span>" +
           '<span class="zk-digest mono">' + C.fmt.hash((g.badge && g.badge.digest) || "0x0", 6) + "</span></div>" +
           '<div class="badge-actions">' +
           '<button type="button" class="btn btn-sm" data-share-badge><i class="bi bi-share"></i> Share badge</button>' +
@@ -226,7 +450,11 @@
   /* ── plain-language helpers ── */
   function stars(r) {
     var n = r > 0.6 ? 5 : r > 0.45 ? 4 : r > 0.3 ? 3 : r > 0.15 ? 2 : 1;
-    return "★★★★★".slice(0, n) + "☆☆☆☆☆".slice(0, 5 - n);
+    var out = '<span class="star-rating" aria-label="strength ' + n + ' of 5">';
+    for (var i = 1; i <= 5; i++) {
+      out += '<i class="bi ' + (i <= n ? "bi-star-fill" : "bi-star") + '" aria-hidden="true"></i>';
+    }
+    return out + "</span>";
   }
   function prettyRisk(label) {
     return String(label).replace(/ (trajectory|flare|drift|strain|lapse)$/i, "");
@@ -269,7 +497,7 @@
       return '<label class="fuel-field"><span class="fuel-label">' + C.esc(label) + ' <b id="fv-' + id + '">' + val + (unit ? " " + unit : "") + '</b></span>' +
         '<input type="range" id="fuel-' + id + '" min="' + min + '" max="' + max + '" step="' + step + '" value="' + val + '" data-fuel-unit="' + (unit || "") + '"></label>';
     }
-    var moods = [["😔", 3], ["😕", 5], ["🙂", 7], ["😄", 9]];
+    var moods = [["bi-emoji-frown-fill", 3], ["bi-emoji-neutral-fill", 5], ["bi-emoji-smile-fill", 7], ["bi-emoji-laughing-fill", 9]];
     return (
       '<div id="fuel-drawer" class="fuel-drawer" hidden>' +
       '<div class="fuel-panel">' +
@@ -278,7 +506,7 @@
       '<p class="tiny" style="color:var(--ink-3)">One tap each. Your twin updates instantly and shows the causal ripple. Stored on this device; blended into your seeded twin.</p>' +
       '<div class="fuel-emoji-row">' +
       '<span class="fuel-emoji-q">Mood?</span>' +
-      moods.map(function (m) { return '<button type="button" class="emoji-btn" data-fuel-mood="' + m[1] + '">' + m[0] + "</button>"; }).join("") +
+      moods.map(function (m) { return '<button type="button" class="emoji-btn" data-fuel-mood="' + m[1] + '" aria-label="Mood ' + m[1] + ' of 10"><i class="bi ' + m[0] + '" aria-hidden="true"></i></button>'; }).join("") +
       "</div>" +
       slider("rested", "How rested?", 0, 10, 1, f.rested != null ? f.rested : 6, "") +
       slider("steps", "Steps today", 0, 20000, 250, f.steps != null ? f.steps : 4000, "") +
@@ -296,10 +524,10 @@
   /* ══════════════ WHAT-IF ARENA (casual counterfactual) ══════════════ */
   function arenaPanel(d) {
     var levers = [
-      { id: "sleepHours", label: "Sleep", emoji: "😴", min: 4, max: 10, step: 0.5, val: (d.latest && d.latest.sleepHours) || 7, unit: "h" },
-      { id: "sodiumMg", label: "Salt", emoji: "🧂", min: 800, max: 5000, step: 100, val: 2300, unit: "mg" },
-      { id: "steps", label: "Move", emoji: "🚶", min: 1000, max: 18000, step: 500, val: 6000, unit: "" },
-      { id: "screenMin", label: "Screen", emoji: "📱", min: 30, max: 700, step: 20, val: 300, unit: "m" }
+      { id: "sleepHours", label: "Sleep", icon: "bi-moon-stars-fill", min: 4, max: 10, step: 0.5, val: (d.latest && d.latest.sleepHours) || 7, unit: "h" },
+      { id: "sodiumMg", label: "Salt", icon: "bi-droplet-half", min: 800, max: 5000, step: 100, val: 2300, unit: "mg" },
+      { id: "steps", label: "Move", icon: "bi-person-walking", min: 1000, max: 18000, step: 500, val: 6000, unit: "" },
+      { id: "screenMin", label: "Screen", icon: "bi-phone", min: 30, max: 700, step: 20, val: 300, unit: "m" }
     ];
     return (
       '<div id="arena-drawer" class="fuel-drawer" hidden>' +
@@ -307,9 +535,9 @@
       '<div class="fuel-head"><h3><i class="bi bi-magic"></i> What-If Arena</h3>' +
       '<button type="button" class="topbar-icon-btn" data-close-arena aria-label="Close"><i class="bi bi-x-lg"></i></button></div>' +
       '<p class="tiny" style="color:var(--ink-3)">Drag the levers. Your cartoon twin reacts instantly along its real causal paths.</p>' +
-      '<div class="arena-twin" id="arena-twin"><span class="arena-face">🙂</span></div>' +
+      '<div class="arena-twin" id="arena-twin"><span class="arena-face"><i class="bi bi-emoji-smile-fill" aria-hidden="true"></i></span></div>' +
       '<div class="arena-levers">' + levers.map(function (l) {
-        return '<div class="arena-lever"><span class="arena-l-emoji">' + l.emoji + "</span>" +
+        return '<div class="arena-lever"><span class="arena-l-emoji"><i class="bi ' + l.icon + '" aria-hidden="true"></i></span>' +
           '<label class="fuel-label tiny">' + C.esc(l.label) + ' <b id="av-' + l.id + '">' + l.val + (l.unit || "") + "</b></label>" +
           '<input type="range" id="arena-' + l.id + '" min="' + l.min + '" max="' + l.max + '" step="' + l.step + '" value="' + l.val + '" data-arena="' + l.id + '" data-unit="' + (l.unit || "") + '"></div>';
       }).join("") + "</div>" +
@@ -324,6 +552,9 @@
   function wireCasual() {
     var root = C.$("#view-root");
     if (!root) return;
+
+    /* Boot the interactive 3D twin sphere (lazy Three.js, low-resource). */
+    initTwin3D();
 
     /* Vibe expand → mini science line */
     C.$$("[data-vibe]", root).forEach(function (el) {
@@ -391,7 +622,7 @@
     });
     var commit = C.$("[data-arena-commit]", root);
     if (commit) commit.addEventListener("click", function () {
-      C.toast("Committed as today's quest 🎯");
+      C.toast("Committed as today's quest");
       closeEl(root, "#arena-drawer");
     });
 
@@ -459,7 +690,7 @@
           '<p class="tiny mono" style="margin-top:6px;color:var(--ink-3)">+' + (g.xpEarned || 0) + " XP · streak " + (g.streak || 0) + " · " + C.esc(g.method || "") + "</p>";
       }
       C.celebrate();
-      C.toast("Twin fueled! +" + (g.xpEarned || 0) + " XP ⚡");
+      C.toast("Twin fueled! +" + (g.xpEarned || 0) + " XP");
       // Re-render the whole casual view so level/quests/whisper update live.
       setTimeout(function () { C.load("casual", { silent: true }); }, 900);
     }).catch(function (err) {
@@ -480,7 +711,7 @@
       C.fuel.log(report);
       C.api("/checkin", null, { body: report }).then(function (env) {
         C.celebrate();
-        C.toast("Heard: “" + text + "” — twin updated ⚡");
+        C.toast("Heard: “" + text + "” — twin updated");
         C.load("casual", { silent: true });
       });
     };
@@ -518,9 +749,10 @@
     var hrv = dSleep * 5.4 - dScreen * 0.004;
     var score = -bp + mood * 4 + hrv * 0.3;
 
-    var face = score > 6 ? "😄" : score > 1 ? "🙂" : score > -1 ? "😐" : score > -6 ? "😕" : "😣";
+    var faceIcon = score > 6 ? "bi-emoji-laughing-fill" : score > 1 ? "bi-emoji-smile-fill"
+      : score > -1 ? "bi-emoji-neutral-fill" : score > -6 ? "bi-emoji-frown-fill" : "bi-emoji-dizzy-fill";
     var twin = C.$("#arena-twin .arena-face", root);
-    if (twin) { twin.textContent = face; twin.parentNode.classList.toggle("arena-happy", score > 1); twin.parentNode.classList.toggle("arena-sad", score < -1); }
+    if (twin) { twin.innerHTML = '<i class="bi ' + faceIcon + '" aria-hidden="true"></i>'; twin.parentNode.classList.toggle("arena-happy", score > 1); twin.parentNode.classList.toggle("arena-sad", score < -1); }
 
     var out = C.$("#arena-out", root);
     if (out) {
@@ -542,11 +774,11 @@
     var env = C.state.cache.casual;
     var g = (env && env.data && env.data.gamification) || {};
     var badge = g.badge || {};
-    var text = "My Vaidyam twin: " + (badge.claim || "leveled up") + " 🏅 (zk-proof digest " + (badge.digest || "") + ")";
+    var text = "My Vaidyam twin: " + (badge.claim || "leveled up") + " (zk-proof digest " + (badge.digest || "") + ")";
     if (navigator.share) {
       navigator.share({ title: "Vaidyam Twin", text: text, url: badge.verifierUrl || location.href }).catch(function () {});
     } else if (navigator.clipboard) {
-      navigator.clipboard.writeText(text + " " + (badge.verifierUrl || "")).then(function () { C.toast("Badge copied to clipboard 📋"); });
+      navigator.clipboard.writeText(text + " " + (badge.verifierUrl || "")).then(function () { C.toast("Badge copied to clipboard"); });
     } else {
       C.toast(text);
     }

@@ -1838,9 +1838,35 @@ input[type="range"]::-moz-range-thumb {
 .hero-stat i { color: var(--amber); }
 .hero-cta { display: flex; flex-wrap: wrap; gap: 8px; }
 
-/* ── Living-twin avatar (pure SVG-less CSS orb) ── */
-.twin-avatar { position: relative; width: 150px; height: 150px; display: grid; place-items: center; }
-.twin-orb { position: relative; width: 120px; height: 120px; display: grid; place-items: center; }
+/* ── Living-twin avatar (interactive 3D sphere + CSS-orb fallback) ── */
+.twin-avatar { position: relative; width: 168px; height: 168px; display: grid; place-items: center; }
+/* Slowly-rotating conic aura ring — a gamified halo framing the 3D twin. */
+.twin-avatar::after {
+  content: ""; position: absolute; inset: -6px; z-index: 0; border-radius: 50%;
+  padding: 2px; pointer-events: none;
+  background: conic-gradient(from 0deg, var(--a1, #7cf5c4), var(--a2, #6ee7f5), transparent 55%, var(--a1, #7cf5c4));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+          mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
+  opacity: .7; animation: twinAuraSpin 9s linear infinite;
+}
+.twin-avatar.twin-risk-hot::after { animation-duration: 4.5s; opacity: .85; }
+@keyframes twinAuraSpin { to { transform: rotate(360deg); } }
+
+/* 3D WebGL canvas mount — fills the avatar box, sits above the fallback. */
+.twin-3d {
+  position: absolute; inset: 0; z-index: 3;
+  border-radius: 50%;
+  cursor: crosshair;
+  filter: drop-shadow(0 0 26px color-mix(in oklab, var(--a1, #7cf5c4) 55%, transparent));
+  transition: opacity .5s ease;
+}
+.twin-3d canvas { width: 100% !important; height: 100% !important; }
+/* Once WebGL is ready, dim the CSS fallback so only the 3D sphere shows. */
+.twin-3d[data-ready="1"] ~ .twin-orb-fallback { opacity: 0; }
+.twin-3d[data-ready="1"] ~ .twin-particles { opacity: .35; }
+.twin-orb-fallback { transition: opacity .5s ease; }
+
+.twin-orb { position: relative; width: 120px; height: 120px; display: grid; place-items: center; z-index: 1; }
 .twin-orb-core {
   width: 74px; height: 74px; border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #fff6, transparent 45%),
@@ -1889,7 +1915,18 @@ input[type="range"]::-moz-range-thumb {
   transition: transform .16s ease, border-color .16s ease, background .16s ease;
 }
 .vibe-cell:hover, .vibe-cell:focus-visible { transform: translateY(-3px); border-color: color-mix(in oklab, var(--vh, #7cf5c4) 55%, var(--stroke)); background: var(--panel-3); outline: none; }
-.vibe-emoji { font-size: 34px; line-height: 1; filter: drop-shadow(0 3px 8px rgba(0,0,0,.25)); }
+/* Vector tech-icon tile (replaces the old emoji) — tinted to the domain hue. */
+.vibe-ico {
+  display: grid; place-items: center;
+  width: 52px; height: 52px; margin-bottom: 4px;
+  border-radius: 14px;
+  color: var(--vh, #7cf5c4);
+  background: color-mix(in oklab, var(--vh, #7cf5c4) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--vh, #7cf5c4) 34%, transparent);
+  transition: transform .16s ease, box-shadow .16s ease;
+}
+.vibe-ico i { font-size: 26px; line-height: 1; filter: drop-shadow(0 0 10px color-mix(in oklab, var(--vh, #7cf5c4) 60%, transparent)); }
+.vibe-cell:hover .vibe-ico, .vibe-cell:focus-visible .vibe-ico { transform: scale(1.08); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--vh, #7cf5c4) 60%, transparent), 0 0 18px color-mix(in oklab, var(--vh, #7cf5c4) 30%, transparent); }
 .vibe-num { font: 800 22px/1 var(--sans); color: var(--ink); }
 .vibe-num small { font-size: 11px; font-weight: 600; color: var(--ink-3); margin-left: 2px; }
 .vibe-label { font-size: 11px; color: var(--ink-3); }
@@ -1902,6 +1939,10 @@ input[type="range"]::-moz-range-thumb {
 .story-lead { font: 500 16px/1.5 var(--sans); color: var(--ink); margin: 0 0 12px; }
 .story-meta { display: flex; align-items: center; gap: 10px; }
 .story-sci { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--hairline); }
+/* Vector star rating (replaces ★/☆ text) inside the strength badge. */
+.star-rating { display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; vertical-align: middle; }
+.star-rating i { font-size: 11px; color: var(--amber); }
+.star-rating i.bi-star { color: color-mix(in oklab, var(--amber) 40%, var(--ink-3)); }
 
 /* ══════════ TWIN WHISPER ══════════ */
 .whisper-bubble {
@@ -1988,7 +2029,8 @@ input[type="range"]::-moz-range-thumb {
   border: 1px solid color-mix(in oklab, var(--aura1, #7cf5c4) 40%, var(--stroke));
   box-shadow: 0 8px 30px rgba(0,0,0,.22);
 }
-.zk-emoji { font-size: 30px; }
+.zk-emoji { display: grid; place-items: center; font-size: 30px; color: var(--aura1, #7cf5c4); }
+.zk-emoji i { filter: drop-shadow(0 0 12px color-mix(in oklab, var(--aura1, #7cf5c4) 65%, transparent)); }
 .zk-tier { font: 700 13px/1.2 var(--sans); color: var(--ink); text-align: center; }
 .zk-digest { font-size: 10px; color: var(--ink-3); }
 .badge-actions { display: flex; flex-direction: column; gap: 8px; }
@@ -2016,9 +2058,9 @@ input[type="range"]::-moz-range-thumb {
 .fuel-note { height: 34px; padding: 0 10px; border-radius: 9px; border: 1px solid var(--stroke); background: var(--panel-2); color: var(--ink); font: 400 13px var(--sans); }
 .fuel-emoji-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .fuel-emoji-q { font: 600 12.5px/1 var(--sans); color: var(--ink-2); }
-.emoji-btn { width: 42px; height: 42px; font-size: 24px; border-radius: 12px; border: 1px solid var(--stroke); background: var(--panel-2); cursor: pointer; transition: transform .14s ease, border-color .14s ease; }
-.emoji-btn:hover { transform: scale(1.08); }
-.emoji-btn.is-sel { border-color: var(--accent); background: var(--accent-wash); transform: scale(1.12); }
+.emoji-btn { display: grid; place-items: center; width: 44px; height: 44px; font-size: 22px; color: var(--ink-2); border-radius: 12px; border: 1px solid var(--stroke); background: var(--panel-2); cursor: pointer; transition: transform .14s ease, border-color .14s ease, color .14s ease; }
+.emoji-btn:hover { transform: scale(1.08); color: var(--ink); }
+.emoji-btn.is-sel { border-color: var(--accent); background: var(--accent-wash); color: var(--accent); transform: scale(1.12); }
 .fuel-check { display: flex; align-items: center; gap: 8px; font: 500 13px var(--sans); color: var(--ink-2); }
 .fuel-submit { margin-top: 4px; }
 .fuel-ripple { margin-top: 6px; padding: 14px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--stroke); }
@@ -2031,12 +2073,12 @@ input[type="range"]::-moz-range-thumb {
 
 /* Arena */
 .arena-twin { display: grid; place-items: center; padding: 8px 0; }
-.arena-face { font-size: 68px; line-height: 1; transition: transform .3s ease; }
+.arena-face { display: grid; place-items: center; font-size: 62px; line-height: 1; color: var(--accent); transition: transform .3s ease; }
 .arena-twin.arena-happy .arena-face { transform: scale(1.12) rotate(-3deg); filter: drop-shadow(0 0 16px var(--accent)); }
 .arena-twin.arena-sad .arena-face { transform: scale(.94); filter: drop-shadow(0 0 14px var(--rose)); }
 .arena-levers { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
 .arena-lever { display: flex; flex-direction: column; gap: 4px; }
-.arena-l-emoji { font-size: 20px; }
+.arena-l-emoji { display: inline-flex; align-items: center; font-size: 18px; color: var(--accent); }
 .arena-out { margin-top: 4px; padding: 12px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--stroke); }
 .arena-metric { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; font: 600 12.5px var(--sans); color: var(--ink-2); }
 .arena-metric .delta { font-family: var(--mono); font-weight: 700; }
@@ -2071,13 +2113,13 @@ input[type="range"]::-moz-range-thumb {
 }
 @media (max-width: 520px) {
   .hero-level { font-size: 24px; }
-  .twin-avatar { width: 120px; height: 120px; }
+  .twin-avatar { width: 132px; height: 132px; }
   .badge-share { justify-content: center; }
 }
 
 /* ══════════ Reduced-motion ══════════ */
 @media (prefers-reduced-motion: reduce) {
-  .twin-orb-core, .twin-orb-ring, .twin-particles .tp,
+  .twin-orb-core, .twin-orb-ring, .twin-particles .tp, .twin-avatar::after,
   .env-breathe span, .btn-glow::after, .domain-light.bad .dl-dot,
   .confetti-bit, .hero-xp-fill, .quest-fill { animation: none !important; transition: none !important; }
   .confetti-layer { display: none !important; }
