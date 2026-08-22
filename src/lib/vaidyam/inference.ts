@@ -1,14 +1,19 @@
 /**
  * Layers 2–3 — Multi-Agent Swarm (MoA) + Draft-Verify Speculative Cascade.
  *
- * Single provider: GroqCloud. Two models only —
- *   - PRIMARY_MODEL  (openai/gpt-oss-120b): main single-shot reasoning (draft).
- *   - AGENT_MODEL    (qwen/qwen3.6-27b):   agentic / multi-call work (verify,
- *     coordinator synthesis, swarm votes).
- * A hard rate limiter caps outbound Groq calls at 3 requests / minute. When the
- * cap is hit, the key is absent, or the call fails, the cascade falls back to
- * the deterministic local reasoner over the causal graph. All prompts are kept
- * as short as possible and outputs are capped tightly to minimise token spend.
+ * Single provider: GroqCloud. Two models —
+ *   - PRIMARY_MODEL  (llama-3.3-70b-versatile): fast, non-reasoning draft +
+ *     the full specialist panel (one batched JSON call → every layer-1 vote &
+ *     rationale is LLM-derived, not a deterministic stub).
+ *   - AGENT_MODEL    (openai/gpt-oss-120b): the Coordinator synthesis. This is
+ *     a production Groq reasoning model driven with `reasoning_format:"hidden"`
+ *     so the chain-of-thought never leaks into the message content (the old
+ *     `qwen/qwen3.6-27b` emitted raw <think>…</think> into the UI).
+ *
+ * A sliding-window rate limiter caps outbound Groq calls. When the cap is hit,
+ * the key is absent, or a call fails, the affected stage falls back to the
+ * deterministic local reasoner over the causal graph. Prompts are terse and
+ * outputs are capped tightly so responses stay short, concise, and cheap.
  */
 import type { Bindings, CascadeStage, CausalGraph, SwarmAgent } from './types'
 import { seeded, clamp, round, gauss } from './rand'
@@ -16,9 +21,20 @@ import type { Vitals } from './twin'
 
 export type ProviderId = 'groq'
 
-// Groq models: primary reasoning vs. agentic multi-call tasks.
-export const PRIMARY_MODEL = 'openai/gpt-oss-120b'
-export const AGENT_MODEL = 'qwen/qwen3.6-27b'
+// Groq models (verified against the live GroqCloud model catalogue):
+//   - PRIMARY_MODEL: fast, high-quality, NO reasoning tags → draft + panel.
+//   - AGENT_MODEL:   strong reasoning model → Coordinator (reasoning hidden).
+export const PRIMARY_MODEL = 'llama-3.3-70b-versatile'
+export const AGENT_MODEL = 'openai/gpt-oss-120b'
+
+/** Models whose responses may contain <think>…</think> chain-of-thought that
+ *  must be requested hidden AND stripped defensively. */
+const REASONING_MODELS = new Set<string>([
+  'openai/gpt-oss-120b',
+  'openai/gpt-oss-20b',
+  'qwen/qwen3.6-27b',
+  'qwen/qwen3-32b'
+])
 
 type ProviderCfg = {
   id: ProviderId
@@ -53,10 +69,14 @@ export function providers(env?: Bindings | null): ProviderCfg[] {
 }
 
 /**
- * Sliding-window rate limiter: at most 3 Groq requests per rolling 60s.
- * Module-scoped so it applies across every call in a server instance.
+ * Sliding-window rate limiter. A single /swarm request now makes at most two
+ * live Groq calls (one batched specialist panel + one coordinator synthesis),
+ * so the window is sized to comfortably admit a normal interaction while still
+ * protecting the free-tier quota. When the cap is hit we fall back to the
+ * deterministic reasoner for the affected stage. Module-scoped so it applies
+ * across every call in a server instance.
  */
-const RATE_MAX = 3
+const RATE_MAX = 12
 const RATE_WINDOW_MS = 60_000
 const callTimes: number[] = []
 function rateOk(): boolean {
@@ -68,15 +88,45 @@ function rateOk(): boolean {
 }
 
 /**
+ * Removes model chain-of-thought and cleans formatting so only the useful,
+ * concise answer reaches the UI. Reasoning models (gpt-oss, qwen) can emit
+ * `<think>…</think>` in raw mode; even with `reasoning_format:"hidden"` we
+ * strip defensively in case a stray tag slips through. Also trims code fences,
+ * leading list bullets, and surrounding quotes.
+ */
+export function stripReasoning(raw: string): string {
+  let t = String(raw || '')
+  // Remove complete <think>…</think> (and <thinking>, <reasoning>) blocks.
+  t = t.replace(/<(think|thinking|reason|reasoning)>[\s\S]*?<\/\1>/gi, '')
+  // Remove a dangling opener with no closer (truncated by max_tokens): drop
+  // everything from the opener onward, since it's unterminated reasoning.
+  t = t.replace(/<(think|thinking|reason|reasoning)>[\s\S]*$/i, '')
+  // Remove any orphan closing tag left behind.
+  t = t.replace(/<\/?(think|thinking|reason|reasoning)>/gi, '')
+  // Strip Markdown code fences / stray backticks.
+  t = t.replace(/```[a-z]*\n?/gi, '').replace(/`/g, '')
+  // Collapse whitespace and trim.
+  t = t.replace(/\s+/g, ' ').trim()
+  // Drop a leading list marker or label the model sometimes prepends.
+  t = t.replace(/^(?:[-*•]\s+|(?:answer|verdict|recommendation)\s*:\s*)/i, '')
+  // Remove wrapping quotes.
+  t = t.replace(/^["'“”]+|["'“”]+$/g, '').trim()
+  return t
+}
+
+/**
  * Token-efficient Groq chat call. `maxTokens` is kept minimal by callers;
- * outputs are capped to exactly what each stage needs.
+ * outputs are capped to exactly what each stage needs. For reasoning models we
+ * request `reasoning_format:"hidden"` so the chain-of-thought is never returned
+ * in the content, then run `stripReasoning` as a belt-and-braces cleanup.
  */
 async function chat(
   cfg: ProviderCfg,
   model: string,
   messages: { role: string; content: string }[],
   maxTokens = 160,
-  timeoutMs = 9000
+  timeoutMs = 9000,
+  opts?: { json?: boolean }
 ): Promise<{ text: string; ms: number; tokensIn: number; tokensOut: number } | null> {
   if (!cfg.key) return null
   if (!rateOk()) return null
@@ -84,6 +134,18 @@ async function chat(
   try {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+    const body: Record<string, unknown> = {
+      model,
+      messages,
+      max_tokens: maxTokens,
+      temperature: 0.3,
+      top_p: 0.9,
+      stream: false
+    }
+    // Hide chain-of-thought for reasoning models so <think> never leaks.
+    if (REASONING_MODELS.has(model)) body.reasoning_format = 'hidden'
+    // Ask for strict JSON where the caller parses structured output.
+    if (opts?.json) body.response_format = { type: 'json_object' }
     const res = await fetch(`${cfg.base}/chat/completions`, {
       method: 'POST',
       signal: ctrl.signal,
@@ -91,22 +153,21 @@ async function chat(
         'content-type': 'application/json',
         authorization: `Bearer ${cfg.key}`
       },
-      body: JSON.stringify({
-        model,
-        messages,
-        max_tokens: maxTokens,
-        temperature: 0.3,
-        top_p: 0.9,
-        stream: false
-      })
+      body: JSON.stringify(body)
     })
     clearTimeout(timer)
     if (!res.ok) return null
     const j: any = await res.json()
     const text = j?.choices?.[0]?.message?.content
     if (!text) return null
+    // JSON callers parse the raw content themselves (only strip fences); prose
+    // callers get the full reasoning-scrub.
+    const cleaned = opts?.json
+      ? String(text).replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim()
+      : stripReasoning(String(text))
+    if (!cleaned) return null
     return {
-      text: String(text).trim(),
+      text: cleaned,
       ms: Date.now() - started,
       tokensIn: Number(j?.usage?.prompt_tokens || 0),
       tokensOut: Number(j?.usage?.completion_tokens || 0)
@@ -218,9 +279,21 @@ export function localReason(
   }
 }
 
+const VALID_VOTES = ['maintain', 'reinforce', 'intervene'] as const
+function coerceVote(v: unknown, fallback: string): string {
+  const s = String(v || '').toLowerCase().trim()
+  return (VALID_VOTES as readonly string[]).includes(s) ? s : fallback
+}
+
 /**
- * Runs the MoA swarm. Layer-1 specialists run in parallel; the Coordinator
- * consumes all layer-1 outputs as auxiliary information (MoA definition).
+ * Runs the MoA swarm. Layer-1 specialists run as ONE batched, live
+ * Mixture-of-Agents panel (a single Groq JSON call returns every specialist's
+ * vote + concise rationale + confidence — so the layer-1 verdicts are genuine
+ * model output, not a deterministic stub). The Coordinator (layer 2) then
+ * consumes all layer-1 outputs as auxiliary information (the MoA definition)
+ * and synthesises one recommendation via the reasoning model with its
+ * chain-of-thought hidden. Everything degrades to the deterministic causal
+ * reasoner when there is no key / the rate cap is hit / a call fails.
  */
 export async function runSwarm(
   env: Bindings | undefined | null,
@@ -238,62 +311,97 @@ export async function runSwarm(
   const rng = seeded('swarm', opts.query, opts.vitals.length)
   let live = false
 
-  // Token budget under the 3-req/min cap: at most ONE live PRIMARY draft here
-  // (on the highest-confidence specialist) and ONE live AGENT-model synthesis
-  // below. Remaining specialists use the deterministic reasoner (no tokens).
   const layer1 = AGENT_DEFS.filter((a) => a.layer === 1)
+  // Deterministic floor for every specialist — always computed so we can
+  // degrade gracefully and blend confidence.
   const locals = layer1.map((def) => ({ def, local: localReason(def.id, opts.graph, opts.vitals, opts.ppr) }))
-  const leadIdx = locals.reduce((bi, cur, i, arr) => (cur.local.confidence > arr[bi].local.confidence ? i : bi), 0)
 
-  const results = await Promise.all(
-    locals.map(async ({ def, local }, i) => {
-      let rationale = local.rationale
-      let ms = Math.round(clamp(gauss(rng, 180, 60), 55, 620))
-      let tokens = Math.round(clamp(gauss(rng, 140, 50), 40, 400))
-
-      // Only the lead specialist spends a live PRIMARY-model draft.
-      if (opts.useLive && cfg && i === leadIdx) {
-        const res = await chat(
-          cfg,
-          PRIMARY_MODEL,
-          [
-            { role: 'system', content: `Vaidyam ${def.name}. Use only the context. <=35 words. No invented numbers.` },
-            { role: 'user', content: `${opts.contextBrief}\nQ: ${opts.query}\nVerdict + the causal edge used.` }
-          ],
-          120
-        )
-        if (res) {
-          live = true
-          rationale = res.text
-          ms = res.ms
-          tokens = res.tokensOut || tokens
+  // ── Live layer-1 panel: ONE batched JSON call returns all specialists ──
+  // This is what makes the swarm genuinely live rather than deterministic:
+  // each specialist's vote AND rationale come from the model.
+  let panel: Record<string, { vote?: string; rationale?: string; confidence?: number }> = {}
+  let panelMs = 0
+  let panelTokens = 0
+  if (opts.useLive && cfg) {
+    const roster = layer1.map((a) => `${a.id} = ${a.name} (${a.domain})`).join('; ')
+    const res = await chat(
+      cfg,
+      PRIMARY_MODEL,
+      [
+        {
+          role: 'system',
+          content:
+            'You are the Vaidyam layer-1 specialist panel. Reason ONLY over the supplied causal-graph context — invent no numbers. ' +
+            'For EACH specialist return a vote and a concise rationale. vote ∈ {maintain,reinforce,intervene}. ' +
+            'rationale ≤ 24 words, must cite the specific causal edge or metric used. ' +
+            'Return STRICT JSON: {"agents":{"<id>":{"vote":"...","rationale":"...","confidence":0.xx}}}. No prose, no markdown.'
+        },
+        {
+          role: 'user',
+          content: `${opts.contextBrief}\nSpecialists: ${roster}\nUser question: ${opts.query}`
         }
+      ],
+      520,
+      9000,
+      { json: true }
+    )
+    if (res) {
+      try {
+        const parsed = JSON.parse(res.text)
+        const agents = parsed?.agents && typeof parsed.agents === 'object' ? parsed.agents : parsed
+        if (agents && typeof agents === 'object') {
+          panel = agents
+          live = true
+          panelMs = res.ms
+          panelTokens = res.tokensOut || 0
+        }
+      } catch {
+        /* leave panel empty → deterministic rationales below */
       }
+    }
+  }
 
-      return {
-        id: def.id,
-        name: def.name,
-        domain: def.domain,
-        layer: 1,
-        provider: 'groq' as const,
-        model: i === leadIdx ? PRIMARY_MODEL : `${PRIMARY_MODEL} (local sim)`,
-        status: 'done' as const,
-        latencyMs: ms,
-        tokens,
-        confidence: local.confidence,
-        vote: local.vote,
-        rationale
-      } satisfies SwarmAgent
-    })
-  )
+  const panelKeys = Object.keys(panel)
+  const results: SwarmAgent[] = locals.map(({ def, local }, i) => {
+    const p = panel[def.id] || {}
+    const liveThis = live && (p.vote !== undefined || p.rationale !== undefined)
+    const vote = liveThis ? coerceVote(p.vote, local.vote) : local.vote
+    const rationale = liveThis && p.rationale ? stripReasoning(String(p.rationale)) : local.rationale
+    const confidence =
+      liveThis && typeof p.confidence === 'number'
+        ? round(clamp(p.confidence, 0.4, 0.99), 2)
+        : local.confidence
+    // Latency/tokens: attribute a share of the batched call to live agents.
+    const ms = liveThis
+      ? Math.max(40, Math.round(panelMs / Math.max(1, panelKeys.length)) + Math.round(gauss(rng, 0, 20)))
+      : Math.round(clamp(gauss(rng, 150, 45), 40, 480))
+    const tokens = liveThis
+      ? Math.max(24, Math.round(panelTokens / Math.max(1, panelKeys.length)))
+      : Math.round(clamp(gauss(rng, 120, 40), 30, 300))
+    return {
+      id: def.id,
+      name: def.name,
+      domain: def.domain,
+      layer: 1,
+      provider: liveThis ? 'groq' : 'local',
+      model: liveThis ? PRIMARY_MODEL : `${PRIMARY_MODEL} (local sim)`,
+      status: 'done',
+      latencyMs: ms,
+      tokens,
+      confidence,
+      vote,
+      rationale
+    } satisfies SwarmAgent
+  })
 
-  // Agent-Forest sampling & voting — n cheap parallel instantiations.
+  // Agent-Forest sampling & voting — n cheap parallel instantiations sampled
+  // around each specialist's (now model-derived) vote & confidence.
   const distribution: Record<string, number> = {}
   const ballots: string[] = []
   for (let i = 0; i < opts.agentCount; i++) {
     const base = results[i % results.length]
     const jitter = rng()
-    const vote = jitter < base.confidence ? base.vote : ['maintain', 'reinforce', 'intervene'][Math.floor(rng() * 3)]
+    const vote = jitter < base.confidence ? base.vote : VALID_VOTES[Math.floor(rng() * 3)]
     ballots.push(vote)
     distribution[vote] = (distribution[vote] || 0) + 1
   }
@@ -303,7 +411,10 @@ export async function runSwarm(
   const coordLocal = localReason(coordDef.id, opts.graph, opts.vitals, opts.ppr)
   let coordRationale = coordLocal.rationale
   let coordMs = Math.round(clamp(gauss(rng, 520, 160), 190, 1500))
-  // Agentic synthesis uses the AGENT_MODEL (one live call, tight budget).
+  let coordTokens = Math.round(clamp(gauss(rng, 200, 60), 80, 480))
+  let coordLive = false
+  // Coordinator synthesis uses the reasoning AGENT_MODEL with reasoning hidden
+  // (one live call, tight budget) — no <think> ever reaches the UI.
   if (opts.useLive && cfg) {
     const res = await chat(
       cfg,
@@ -312,21 +423,26 @@ export async function runSwarm(
         {
           role: 'system',
           content:
-            'Vaidyam Coordinator. Synthesise ONE recommendation in <=45 words, cite the dominant causal chain. No diagnosis; advise clinician review if high stakes.'
+            'You are the Vaidyam Preventive-Care Coordinator. Read the specialist votes and synthesise ONE clear recommendation. ' +
+            'Answer in ≤ 40 words, plain prose, cite the single dominant causal chain. ' +
+            'Do NOT show your reasoning, do NOT use <think> tags, output only the final recommendation. ' +
+            'No diagnosis; if the query is high-stakes, advise clinician review.'
         },
         {
           role: 'user',
-          content: `${opts.contextBrief}\nAgents: ${results
+          content: `${opts.contextBrief}\nSpecialist votes: ${results
             .map((r) => `${r.domain}:${r.vote}`)
-            .join(',')}\nBallot:${JSON.stringify(distribution)}\nQ:${opts.query}`
+            .join(', ')}\nBallot tally: ${JSON.stringify(distribution)}\nUser question: ${opts.query}`
         }
       ],
-      160
+      220
     )
-    if (res) {
+    if (res && res.text) {
       live = true
+      coordLive = true
       coordRationale = res.text
       coordMs = res.ms
+      coordTokens = res.tokensOut || coordTokens
     }
   }
 
@@ -335,11 +451,11 @@ export async function runSwarm(
     name: coordDef.name,
     domain: coordDef.domain,
     layer: 2,
-    provider: 'groq',
-    model: AGENT_MODEL,
+    provider: coordLive ? 'groq' : 'local',
+    model: coordLive ? AGENT_MODEL : `${AGENT_MODEL} (local sim)`,
     status: 'done',
     latencyMs: coordMs,
-    tokens: Math.round(clamp(gauss(rng, 260, 70), 90, 620)),
+    tokens: coordTokens,
     confidence: round(clamp(coordLocal.confidence + 0.02, 0.6, 0.97), 2),
     vote: String(winner[0]),
     rationale: coordRationale

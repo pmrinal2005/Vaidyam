@@ -148,7 +148,22 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75)); // cap DPR for low-end GPUs
     renderer.setSize(W, H, false);
     renderer.setClearColor(0x000000, 0);
-    if ("outputEncoding" in renderer && THREE.sRGBEncoding) renderer.outputEncoding = THREE.sRGBEncoding;
+    // ── Colour management + tone mapping (prevents the washed-out / blown-out
+    //    look). We render linear, then tone-map to sRGB for display so PBR
+    //    materials keep their real surface colour instead of clipping to white.
+    //    Supports both the modern (r150+) `colorSpace`/`outputColorSpace` API
+    //    and the legacy (<=r137, as CDN-loaded here) `outputEncoding` API. ──
+    if ("outputColorSpace" in renderer && THREE.SRGBColorSpace) {
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+    } else if ("outputEncoding" in renderer && THREE.sRGBEncoding) {
+      renderer.outputEncoding = THREE.sRGBEncoding;
+    }
+    if (THREE.ACESFilmicToneMapping !== undefined) {
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      // Keep key light well within standard PBR exposure — >1 was over-exposing.
+      renderer.toneMappingExposure = 0.95;
+    }
+    if (THREE.ColorManagement) THREE.ColorManagement.enabled = true;
     mount.appendChild(renderer.domElement);
     renderer.domElement.style.display = "block";
 
@@ -160,17 +175,29 @@
     //    keeps the original aesthetic behind the loaded model. ──
     var glowGeo = new THREE.SphereGeometry(1.72, 24, 18);
     var glowMat = new THREE.MeshBasicMaterial({
-      color: col2, transparent: true, opacity: 0.18,
+      // Subtle halo only — the previous 0.18 additive shell bloomed over the
+      // model and contributed to the washed-out look. Pushed behind the model
+      // (larger radius handled by scale) and dimmed so it reads as a rim glow.
+      color: col2, transparent: true, opacity: 0.08,
       side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false
     });
     var glow = new THREE.Mesh(glowGeo, glowMat);
+    glow.scale.setScalar(1.15);
     twin.add(glow);
 
-    // ── Lights (cheap: one ambient + two coloured points echoing the aura) ──
-    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-    var key = new THREE.PointLight(col1.getHex(), 1.5, 24); key.position.set(3, 3, 5); scene.add(key);
-    var fill = new THREE.PointLight(col2.getHex(), 1.1, 24); fill.position.set(-3, -1, 4); scene.add(fill);
-    var rim = new THREE.PointLight(0xffffff, 0.5, 24); rim.position.set(0, 0, -5); scene.add(rim);
+    // ── Lights: a proper 3-point rig at standard PBR intensities. Previously
+    //    ambient 0.7 + three points (1.5 / 1.1 / 0.5) plus an emissive skin
+    //    stacked far past a physical range, so every surface clipped to white
+    //    and lost its texture. These values keep the twin lit and readable
+    //    without over-exposing the mesh. ──
+    scene.add(new THREE.AmbientLight(0xffffff, 0.32));
+    // Neutral-white key from front-upper-right (a coloured key was tinting the
+    // whole surface toward the aura hue and hiding the real base colour).
+    var key = new THREE.DirectionalLight(0xffffff, 0.9); key.position.set(3, 4, 5); scene.add(key);
+    // Gentle coloured fill keeps a hint of the living-aura scheme without
+    // dominating the material.
+    var fill = new THREE.PointLight(col2.getHex(), 0.45, 22); fill.position.set(-3, -1, 4); scene.add(fill);
+    var rim = new THREE.PointLight(col1.getHex(), 0.35, 22); rim.position.set(0, 1.5, -5); scene.add(rim);
 
     // Model holder — cloned from the cached scene so multiple renders never
     // fight over one object graph.
@@ -181,19 +208,42 @@
     loadTwinModel(THREE).then(function (root) {
       if (!renderer.domElement || !renderer.domElement.parentNode) return; // torn down
       loadedModel = root.clone(true);
-      // Re-skin with a neon emissive material so the avatar keeps the twin's
-      // living aura colour scheme (the supplied GLB ships no textures).
+      // ── PRESERVE the GLB's real materials + textures. The previous build
+      //    overwrote every mesh with a flat neon emissive MeshStandardMaterial,
+      //    which discarded the model's baseColor/roughness/metallic textures and
+      //    (together with the over-bright lights) produced the blown-out white
+      //    glow. Here we KEEP the authored PBR material and only:
+      //      1. flag its colour textures as sRGB so colours are decoded right,
+      //      2. tame any accidental full-white emissive the export may carry,
+      //      3. add a very slight aura-tinted emissive as a living accent that
+      //         does NOT wash out the surface. ──
       loadedModel.traverse(function (o) {
-        if (o.isMesh) {
-          o.material = new THREE.MeshStandardMaterial({
-            color: col1,
-            emissive: col1.clone().multiplyScalar(0.42),
-            emissiveIntensity: 1.0,
-            roughness: 0.34, metalness: 0.18,
-            transparent: true, opacity: 0.98
+        if (!o.isMesh || !o.material) return;
+        var mats = Array.isArray(o.material) ? o.material : [o.material];
+        mats.forEach(function (m) {
+          // Correct colour-space on the base-colour (albedo) + emissive maps so
+          // they aren't double-brightened. Normal/roughness/metallic maps stay
+          // linear (leave untouched).
+          [m.map, m.emissiveMap].forEach(function (tex) {
+            if (!tex) return;
+            if ("colorSpace" in tex && THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+            else if ("encoding" in tex && THREE.sRGBEncoding) tex.encoding = THREE.sRGBEncoding;
+            tex.needsUpdate = true;
           });
-          o.castShadow = false; o.receiveShadow = false;
-        }
+          if (m.isMeshStandardMaterial || m.isMeshPhysicalMaterial) {
+            // Keep authored roughness/metalness; only clamp emissive so the
+            // mesh can never self-illuminate to white.
+            if (m.emissive) {
+              m.emissive = col1.clone().multiplyScalar(0.12);
+              m.emissiveIntensity = 0.25;
+            }
+            // Ensure the base colour isn't left as a stray non-white tint that
+            // fights the texture; a white baseColorFactor lets the texture show.
+            if (m.map && m.color) m.color.setRGB(1, 1, 1);
+          }
+          m.needsUpdate = true;
+        });
+        o.castShadow = false; o.receiveShadow = false;
       });
       modelGroup.add(loadedModel);
       mount.setAttribute("data-ready", "1"); // fade the CSS fallback out
